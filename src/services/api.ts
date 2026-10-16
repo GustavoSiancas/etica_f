@@ -58,11 +58,26 @@ export const expedientesService = {
   },
   async documents(id: number) { return list<CaseDocument>(await request(`/expedientes/${id}/documents`), 'documents') },
   async documentStages() {
-    const rows = list<Record<string, unknown>>(await request('/document-stages'), 'stages')
+    const response = await request<unknown>('/document-stages')
+    const rows = list<Record<string, unknown>>(response, 'stages')
     return rows.map(stage => {
-      const nested = stage.substages ?? stage.sub_stages ?? stage.subStages
-      return { ...stage, substages: Array.isArray(nested) ? nested : [] } as unknown as DocumentStage
-    })
+      const nested = stage.substages ?? stage.sub_stages ?? stage.subStages ?? stage.children
+      const substages = Array.isArray(nested) ? nested : nested && typeof nested === 'object' ? Object.values(nested as Record<string, unknown>) : []
+      return {
+        id: Number(stage.id),
+        code: String(stage.code ?? ''),
+        name: String(stage.name ?? stage.title ?? ''),
+        sort_order: Number(stage.sort_order ?? stage.sortOrder ?? 0),
+        is_active: stage.is_active as boolean | undefined,
+        substages: substages.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object').map(item => ({
+          id: Number(item.id),
+          code: String(item.code ?? ''),
+          name: String(item.name ?? item.title ?? ''),
+          sort_order: Number(item.sort_order ?? item.sortOrder ?? 0),
+          is_active: item.is_active as boolean | undefined,
+        })).filter(item => Number.isInteger(item.id) && item.id > 0 && item.name),
+      } as DocumentStage
+    }).filter(stage => Number.isInteger(stage.id) && stage.id > 0 && stage.name)
   },
   createDocument(id: number, input: { title: string; substage_id: number; document_date?: string; file_url?: string }) {
     const title = input.title.trim()

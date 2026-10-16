@@ -16,12 +16,13 @@ export const initiationTypes = {
   APROBADO_POR_ASAMBLEA_GENERAL: 'Aprobado por Asamblea General',
 }
 export type InitiationType = keyof typeof initiationTypes
-const baseUrl = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+const baseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '')
 export class ApiError extends Error {
   status: number
   constructor(message: string, status: number) { super(message); this.status = status }
 }
 async function request<T>(path: string, body?: unknown, method?: string): Promise<T> {
+  if (!baseUrl) throw new ApiError('Configura VITE_API_BASE_URL en .env.local con la URL base del backend.', 0)
   let response: Response
   try {
     response = await fetch(`${baseUrl}${path}`, { method: method || (body === undefined ? 'GET' : 'POST'), headers: body === undefined ? undefined : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) })

@@ -1,4 +1,4 @@
-﻿# Ética CAL
+# Ética CAL
 
 React, TypeScript y Vite. Gestión sin autenticación de expedientes, denunciantes y denunciados.
 
@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-El backend debe estar disponible en `http://localhost:8080`. Vite redirige `/api` al backend. Para cambiar la configuración, copia `.env.example` a `.env.local` y reinicia Vite.
+Configura `.env.local` con `VITE_API_BASE_URL` apuntando a la URL base completa de tu backend y reinicia Vite. El navegador se conecta directamente a esa URL, así que el backend debe permitir el origen de la aplicación mediante CORS.
 
 ## Flujo
 
@@ -28,7 +28,7 @@ npm run build
 npm run preview
 ```
 
-En producción, configura un proxy de `/api` al backend o define `VITE_API_BASE_URL` antes de compilar con la URL del backend y habilita CORS allí. El proxy de Vite funciona solo durante desarrollo.
+Antes de compilar, configura `VITE_API_BASE_URL` con la URL base del backend. El backend debe permitir el origen de la aplicación mediante CORS.
 
 Servicios HTTP: `src/services/api.ts`. Gestión: `src/components/Management.tsx`. Dashboard y navegación lateral: `src/App.tsx`.
 

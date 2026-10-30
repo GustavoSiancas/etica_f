@@ -1,0 +1,112 @@
+import { useEffect, useState } from 'react'
+import { caseStatuses, expedientesService, formatCal, formatCaseNumber, initiationTypes, locationLabel, statusLabel } from '../services/api'
+import type { CaseFile, CaseFilters, CaseStatus, InitiationType, Person, Role } from '../services/api'
+import CaseRow from './CaseRow'
+import useLocations from './useLocations'
+
+const pageSize = 20
+const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'No se pudieron consultar los expedientes.'
+const emptyFilters = { status: '' as CaseStatus | '', location: '', from: '', to: '' }
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/)
+  return ((parts[0]?.[0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase() || '?'
+}
+function formatDate(value?: string | null) {
+  if (!value) return 'Sin fecha'
+  const date = new Date(value + 'T00:00:00')
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium' }).format(date)
+}
+
+export default function ParticipantProfile({ role, person, onBack, onOpenCase }: { role: Role; person: Person; onBack: () => void; onOpenCase: (file: CaseFile) => void }) {
+  const singular = role === 'denunciantes' ? 'Denunciante' : 'Denunciado'
+  const locations = useLocations()
+  const [filters, setFilters] = useState(emptyFilters)
+  const [offset, setOffset] = useState(0)
+  const [refresh, setRefresh] = useState(0)
+  const [page, setPage] = useState<{ data: CaseFile[]; total: number } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [counts, setCounts] = useState<{ all: number; open: number; closed: number } | null>(null)
+
+  // Contadores generales del participante (sin filtros).
+  useEffect(() => {
+    let current = true
+    Promise.all([undefined, 'ABIERTO', 'CERRADO'].map(status => expedientesService.byParticipant(role, person.id, 1, 0, status ? { status: status as CaseStatus } : {})))
+      .then(([all, open, closed]) => { if (current) setCounts({ all: all.total, open: open.total, closed: closed.total }) })
+      .catch(() => { if (current) setCounts(null) })
+    return () => { current = false }
+  }, [role, person.id, refresh])
+
+  useEffect(() => {
+    let current = true
+    setLoading(true); setError('')
+    const query: CaseFilters = { status: filters.status, location: filters.location, from: filters.from, to: filters.to }
+    expedientesService.byParticipant(role, person.id, pageSize, offset, query)
+      .then(result => { if (current) setPage(result) })
+      .catch(caught => { if (current) { setError(errorMessage(caught)); setPage(null) } })
+      .finally(() => { if (current) setLoading(false) })
+    return () => { current = false }
+  }, [role, person.id, offset, filters, refresh])
+
+  const update = (patch: Partial<typeof emptyFilters>) => { setOffset(0); setFilters(current => ({ ...current, ...patch })) }
+  const filtered = filters.status !== '' || filters.location !== '' || filters.from !== '' || filters.to !== ''
+  const rangeError = filters.from && filters.to && filters.from > filters.to
+  const value = (n?: number) => counts ? n : '—'
+
+  return <div className="profile">
+    <button className="secondary" onClick={onBack}>← Volver a {role}</button>
+
+    <section className="profile-hero">
+      <span className={`profile-avatar is-${role}`} aria-hidden="true">{initials(person.name)}</span>
+      <div className="profile-identity">
+        <span className={`profile-role is-${role}`}>{singular}</span>
+        <h1>{person.name}</h1>
+        <dl className="profile-facts">
+          <div><dt>{person.document_type || 'Documento'}</dt><dd>{person.document_number || 'Sin número'}</dd></div>
+          {person.registration_number != null && <div><dt>CAL</dt><dd>{formatCal(person.registration_number)}</dd></div>}
+          <div><dt>ID interno</dt><dd>{person.id}</dd></div>
+        </dl>
+      </div>
+      <div className="profile-stats">
+        <button type="button" className={filters.status === '' ? 'is-active' : ''} onClick={() => update({ status: '' })}><strong>{value(counts?.all)}</strong><span>Expedientes</span></button>
+        <button type="button" className={`is-open${filters.status === 'ABIERTO' ? ' is-active' : ''}`} onClick={() => update({ status: 'ABIERTO' })}><strong>{value(counts?.open)}</strong><span>Abiertos</span></button>
+        <button type="button" className={`is-closed${filters.status === 'CERRADO' ? ' is-active' : ''}`} onClick={() => update({ status: 'CERRADO' })}><strong>{value(counts?.closed)}</strong><span>Cerrados</span></button>
+      </div>
+    </section>
+
+    <section className="dashboard-table profile-cases">
+      <div className="panel-heading profile-toolbar">
+        <div><h2>Expedientes de {person.name.split(/\s+/)[0]}</h2><p>Abiertos y cerrados · más recientes primero</p></div>
+        <div className="profile-filters">
+          <div className="status-filter" role="group" aria-label="Filtrar por estado">
+            {([['', 'Todos'], ...caseStatuses.map(option => [option.value, option.label])] as [CaseStatus | '', string][]).map(([status, label]) => <button key={status || 'all'} type="button" className={`status-filter-button${filters.status === status ? ' active' : ''}`} aria-pressed={filters.status === status} onClick={() => update({ status })}>{label}</button>)}
+          </div>
+          <select aria-label="Ubicación" value={filters.location} onChange={event => update({ location: event.target.value })}><option value="">Todas las ubicaciones</option>{locations.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
+          <div className={`profile-range${rangeError ? ' is-invalid' : ''}`} role="group" aria-label="Fecha de apertura">
+            <label><span>Desde</span><input type="date" value={filters.from} max={filters.to || undefined} onChange={event => update({ from: event.target.value })}/></label>
+            <label><span>Hasta</span><input type="date" value={filters.to} min={filters.from || undefined} onChange={event => update({ to: event.target.value })}/></label>
+          </div>
+          {filtered && <button type="button" className="row-link" onClick={() => { setOffset(0); setFilters(emptyFilters) }}>Limpiar</button>}
+        </div>
+      </div>
+      {error && <p className="api-error profile-error" role="alert">{error} <button type="button" className="row-link" onClick={() => setRefresh(n => n + 1)}>Reintentar</button></p>}
+      {loading && !page ? <div className="empty-state" role="status">Cargando expedientes…</div>
+        : page && page.data.length ? <div className={`table-scroll${loading ? ' is-refreshing' : ''}`}><table>
+          <thead><tr><th>Expediente</th><th>Fecha de apertura</th><th>Tipo de inicio</th><th>Ubicación</th><th>Estado</th><th aria-label="Abrir"/></tr></thead>
+          <tbody>{page.data.map(file => <CaseRow key={file.id} file={file} onOpen={onOpenCase}>
+            <td><strong>{formatCaseNumber(file.number)}</strong>{file.description && <small className="profile-case-desc">{file.description}</small>}</td>
+            <td>{formatDate(file.opening_date)}</td>
+            <td>{file.init_type ? initiationTypes[file.init_type as InitiationType] || file.init_type : 'Sin tipo'}</td>
+            <td>{locationLabel(file.location)}</td>
+            <td><span className="status" data-status={file.status}>{statusLabel(file.status)}</span></td>
+            <td className="profile-open">Ver →</td>
+          </CaseRow>)}</tbody>
+        </table></div>
+        : !error && page && <div className="empty-state">{filtered
+          ? <><h3>Sin resultados</h3><p>Ningún expediente de esta persona coincide con los filtros.</p><button className="secondary" onClick={() => { setOffset(0); setFilters(emptyFilters) }}>Limpiar filtros</button></>
+          : <><h3>Sin expedientes</h3><p>Esta persona aún no figura como {singular.toLowerCase()} en ningún expediente.</p></>}</div>}
+      {page && page.total > 0 && <div className="table-footer"><span>{page.data.length ? `${offset + 1}–${offset + page.data.length}` : 0} de {page.total}</span><div><button className="secondary" disabled={loading || offset === 0} onClick={() => setOffset(Math.max(0, offset - pageSize))}>Anterior</button><button className="secondary" disabled={loading || offset + pageSize >= page.total} onClick={() => setOffset(offset + pageSize)}>Siguiente</button></div></div>}
+    </section>
+  </div>
+}

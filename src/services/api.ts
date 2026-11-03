@@ -21,9 +21,19 @@ export const formatCaseNumber = (value?: string) => {
   const match = /^(\d+)-(\d+)$/.exec((value || '').trim())
   return match ? `${match[1].padStart(5, '0')}-${match[2]}` : value || ''
 }
+export interface FolderType { id: number; name: string }
+export interface ExpedienteFolder {
+  id: number
+  expediente_id: number
+  folder_type_id: number
+  name: string
+  created_at?: string
+  updated_at?: string
+}
 export interface ExpedienteSection {
   id: number
   expediente_id: number
+  expediente_folder_id: number
   expediente_section_parent_id: number | null
   name: string
   type: string
@@ -34,6 +44,8 @@ export interface ExpedienteSection {
   updated_at?: string
 }
 export interface SectionInput {
+  // Solo al crear: no se admite mover una sección a otra carpeta.
+  expediente_folder_id?: number
   name?: string
   type?: string
   document_date?: string | null
@@ -43,7 +55,6 @@ export interface SectionInput {
 }
 export interface DocumentRecord { id: number; name: string; file_url?: string | null; created_at?: string; updated_at?: string }
 export interface DocumentsPage { data: DocumentRecord[]; total: number; limit: number; offset: number }
-export interface DocumentTypeOption { id: number; name: string; sort_order?: number }
 export interface ExpedienteStatus { value: string; label: string }
 export interface Association { id: number; is_active?: boolean }
 export interface ActiveParticipant extends Association { expediente_id: number; participant: Person }
@@ -164,9 +175,8 @@ export const expedientesService = {
     if (!value || value.length > 30) throw new Error('El estado es obligatorio y admite hasta 30 caracteres.')
     return request<CaseFile>(`/expedientes/${id}/status`, { status: value }, 'PATCH')
   },
+  // Los participantes solo se asignan al crear el expediente; no hay endpoints para modificarlos después.
   async participants(id: number, role: Role) { return list<ActiveParticipant>(await request(`/expedientes/${id}/${role}`), role) },
-  associate(id: number, role: Role, personId: number) { return request<Association>(`/expedientes/${id}/${role}`, { [role === 'denunciantes' ? 'denunciante_id' : 'denunciado_id']: personId }) },
-  remove(id: number, role: Role, personId: number) { return request<void>(`/expedientes/${id}/${role}/${personId}`, undefined, 'DELETE') },
   getInitiationTypes() { return request<unknown>('/tipos-inicio') },
 }
 export const personasService = {
@@ -219,6 +229,7 @@ function positiveId(value: number, label: string) {
 }
 function cleanSection(input: SectionInput, creating: boolean) {
   const body: SectionInput = {}
+  if (creating && input.expediente_folder_id !== undefined) body.expediente_folder_id = positiveId(input.expediente_folder_id, 'La carpeta')
   if (input.name !== undefined || creating) {
     const name = (input.name || '').trim()
     if (!name || name.length > 255) throw new Error('El nombre es obligatorio y admite hasta 255 caracteres.')
@@ -261,7 +272,38 @@ function cleanDocument(input: { name?: string; file_url?: string | null }, creat
   return body
 }
 
+// ---------- Carpetas del expediente ----------
+export const foldersService = {
+  // Catálogo de nombres disponibles; los IDs se usan tal como llegan del backend.
+  async types() { return list<FolderType>(await request('/folder-types'), 'folder_types') },
+  async list(expedienteId: number) { return list<ExpedienteFolder>(await request(`/expedientes/${positiveId(expedienteId, 'El expediente')}/folders`), 'folders') },
+  // Si la carpeta de ese tipo ya existe, el backend devuelve la misma sin duplicarla.
+  create(expedienteId: number, folderTypeId: number) {
+    return request<ExpedienteFolder>(`/expedientes/${positiveId(expedienteId, 'El expediente')}/folders`, { folder_type_id: positiveId(folderTypeId, 'El tipo de carpeta') })
+  },
+  // Secciones y subsecciones de una carpeta, como array plano.
+  async sections(expedienteId: number, folderId: number) {
+    return list<ExpedienteSection>(await request(`/expedientes/${positiveId(expedienteId, 'El expediente')}/folders/${positiveId(folderId, 'La carpeta')}/sections`), 'sections')
+  },
+}
+
+export interface SectionNode extends ExpedienteSection { children: SectionNode[] }
+// Arma el árbol desde el listado plano; hermanas por sort_order e ID. Una sección cuyo padre no llegó se trata como raíz.
+export function buildSectionTree(sections: ExpedienteSection[]): SectionNode[] {
+  const nodes = new Map<number, SectionNode>(sections.map(section => [section.id, { ...section, children: [] }]))
+  const roots: SectionNode[] = []
+  for (const node of nodes.values()) {
+    const parent = node.expediente_section_parent_id == null ? undefined : nodes.get(node.expediente_section_parent_id)
+    if (parent) parent.children.push(node)
+    else roots.push(node)
+  }
+  const sort = (items: SectionNode[]) => { items.sort((a, b) => a.sort_order - b.sort_order || a.id - b.id); items.forEach(item => sort(item.children)) }
+  sort(roots)
+  return roots
+}
+
 export const sectionsService = {
+  // Todas las secciones de todas las carpetas del expediente.
   async list(expedienteId: number) { return list<ExpedienteSection>(await request(`/expedientes/${positiveId(expedienteId, 'El expediente')}/sections`), 'sections') },
   get(expedienteId: number, sectionId: number) { return request<ExpedienteSection>(`/expedientes/${expedienteId}/sections/${sectionId}`) },
   create(expedienteId: number, input: SectionInput) { return request<ExpedienteSection>(`/expedientes/${expedienteId}/sections`, cleanSection(input, true)) },
@@ -324,14 +366,8 @@ export const documentsService = {
     }
   },
   async byExpediente(expedienteId: number) { return list<DocumentRecord>(await request(`/expedientes/${expedienteId}/documents`), 'documents') },
-  async types(): Promise<DocumentTypeOption[]> {
-    const rows = list<Record<string, unknown>>(await request('/document-types'), 'document_types')
-    return rows
-      .filter(row => row.is_active !== false)
-      .map(row => ({ id: Number(row.id), name: String(row.name ?? row.label ?? row.value ?? '').trim(), sort_order: Number(row.sort_order ?? 0) }))
-      .filter(row => row.name)
-  },
-  async uploadFile(id: number, file: File): Promise<DocumentRecord> {
+  // Firma → PUT directo al almacenamiento → confirma el enlace. Devuelve solo el ID y el nuevo file_url.
+  async uploadFile(id: number, file: File): Promise<{ id: number; file_url: string }> {
     const contentType = contentTypeOf(file)
     if (file.size > maxUploadBytes) throw new Error('El archivo supera el máximo permitido de 10 MiB.')
     const signature = await request<UploadSignature>(`/documents/${id}/upload-url`, { content_type: contentType })
@@ -343,6 +379,7 @@ export const documentsService = {
     catch { throw new Error('No se pudo subir el archivo a R2. Revisa la conexión y los permisos CORS del bucket.') }
     if (!upload.ok) throw new Error(`R2 rechazó la carga (${upload.status}).`)
     if (Date.now() >= expiresAt) throw new Error('La carga tardó más de lo permitido por la firma. Vuelve a intentarlo.')
-    return request<DocumentRecord>(`/documents/${id}/file-url`, { file_url: signature.file_url }, 'PATCH')
+    const confirmed = await request<{ file_url?: string }>(`/documents/${id}/file-url`, { file_url: signature.file_url }, 'PATCH')
+    return { id, file_url: confirmed.file_url || signature.file_url }
   },
 }

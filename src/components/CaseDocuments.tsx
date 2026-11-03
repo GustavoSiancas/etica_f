@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, ReactNode } from 'react'
-import { acceptedUploads, documentsService, maxUploadBytes, sectionsService } from '../services/api'
-import type { DocumentRecord, ExpedienteSection } from '../services/api'
+import { acceptedUploads, buildSectionTree, documentsService, foldersService, maxUploadBytes, sectionsService } from '../services/api'
+import type { DocumentRecord, ExpedienteFolder, ExpedienteSection, FolderType, SectionInput, SectionNode } from '../services/api'
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Ocurrió un error inesperado.'
 const sectionColors = ['#2563EB', '#0E9F6E', '#D97706', '#DC2626', '#7C3AED', '#DB2777', '#0891B2', '#808080']
 const defaultTypes = ['Escrito de oficio', 'Resolución', 'OTROS']
-const lockedMessage = 'El expediente está cerrado: no se pueden agregar ni modificar secciones o documentos.'
+const lockedMessage = 'El expediente está cerrado: no se pueden agregar ni modificar carpetas, secciones o documentos.'
 
 type DocsState = { items: DocumentRecord[]; loading: boolean; error: string }
 type SectionDialog = { mode: 'create'; parent: ExpedienteSection | null } | { mode: 'edit'; section: ExpedienteSection }
@@ -15,6 +15,7 @@ type Confirm = { title: string; message: ReactNode; confirmLabel: string; action
 
 const icons: Record<string, ReactNode> = {
   chevron: <path d="m9 6 6 6-6 6"/>,
+  folder: <path d="M3 7V5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>,
   plus: <path d="M12 5v14M5 12h14"/>,
   folderPlus: <><path d="M3 7V5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/><path d="M12 10v6M9 13h6"/></>,
   filePlus: <><path d="M6 3h8l5 5v13H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M14 3v5h5M12 12v6M9 15h6"/></>,
@@ -127,7 +128,7 @@ function SectionForm({ dialog, sections, types, onCancel, onSubmit }: {
       </div>
     </div>
     {editing && <div className="tree-form-row">
-      <div><label htmlFor="section-parent">Ubicación</label><select id="section-parent" value={parent} onChange={event => setParent(event.target.value)}><option value="">Sección principal (raíz)</option>{sections.filter(item => !blocked.has(item.id)).map(item => <option key={item.id} value={item.id}>{pathOf(item)}</option>)}</select></div>
+      <div><label htmlFor="section-parent">Ubicación</label><select id="section-parent" value={parent} onChange={event => setParent(event.target.value)}><option value="">Raíz de la carpeta</option>{sections.filter(item => !blocked.has(item.id)).map(item => <option key={item.id} value={item.id}>{pathOf(item)}</option>)}</select></div>
       <div><label htmlFor="section-order">Orden</label><input id="section-order" type="number" min={0} step={1} required value={order} onChange={event => setOrder(event.target.value)}/></div>
     </div>}
     {error && <p className="api-error" role="alert">{error}</p>}
@@ -216,14 +217,96 @@ function LockedTip({ locked, children }: { locked: boolean; children: ReactNode 
   return locked ? <span className="locked-wrap locked-tip" data-tooltip={lockedMessage} tabIndex={0} aria-label={lockedMessage}>{children}</span> : <>{children}</>
 }
 
+// Ofrece solo los tipos de carpeta que el expediente todavía no tiene.
+function FolderForm({ expedienteId, folders, onCancel, onCreated }: { expedienteId: number; folders: ExpedienteFolder[]; onCancel: () => void; onCreated: (folder: ExpedienteFolder) => void }) {
+  const [types, setTypes] = useState<FolderType[] | null>(null)
+  const [chosen, setChosen] = useState<number | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let current = true
+    foldersService.types().then(rows => { if (current) setTypes(rows) }).catch(caught => { if (current) { setError(errorMessage(caught)); setTypes([]) } })
+    return () => { current = false }
+  }, [])
+  const existing = new Set(folders.map(folder => folder.folder_type_id))
+  const available = (types || []).filter(type => !existing.has(type.id))
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    if (chosen === null) return
+    setSaving(true); setError('')
+    try { onCreated(await foldersService.create(expedienteId, chosen)) }
+    catch (caught) { setError(errorMessage(caught)); setSaving(false) }
+  }
+  return <form className="case-create-form tree-form" onSubmit={submit}>
+    {types === null ? <p className="detail-empty" role="status">Cargando tipos de carpeta…</p>
+      : available.length ? <ul className="tree-pick-list" role="listbox" aria-label="Tipos de carpeta disponibles">{available.map(type => <li key={type.id}><button type="button" role="option" aria-selected={chosen === type.id} className={chosen === type.id ? 'is-selected' : ''} onClick={() => setChosen(type.id)}><span className="tree-file-badge"><Icon name="folder"/></span><span><strong>{type.name}</strong></span></button></li>)}</ul>
+      : !error && <p className="tree-empty-inline">Este expediente ya tiene todas las carpetas disponibles.</p>}
+    {error && <p className="api-error" role="alert">{error}</p>}
+    <div className="case-create-actions"><button type="button" className="secondary" disabled={saving} onClick={onCancel}>Cancelar</button><button className="primary" disabled={saving || chosen === null}>{saving ? 'Creando…' : 'Añadir carpeta'}</button></div>
+  </form>
+}
+
+// Navegación expediente → carpeta → secciones. Cada carpeta carga su propio árbol.
 export default function CaseDocuments({ expedienteId, locked = false }: { expedienteId: number; locked?: boolean }) {
+  const [folders, setFolders] = useState<ExpedienteFolder[]>([])
+  const [selected, setSelected] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [refresh, setRefresh] = useState(0)
+  const [adding, setAdding] = useState(false)
+  useEffect(() => { if (locked) setAdding(false) }, [locked])
+  useEffect(() => {
+    let current = true
+    setLoading(true); setError('')
+    foldersService.list(expedienteId).then(rows => {
+      if (!current) return
+      setFolders(rows)
+      setSelected(id => rows.some(folder => folder.id === id) ? id : rows[0]?.id ?? null)
+    }).catch(caught => { if (current) setError(errorMessage(caught)) }).finally(() => { if (current) setLoading(false) })
+    return () => { current = false }
+  }, [expedienteId, refresh])
+  const folder = folders.find(item => item.id === selected) || null
+  function created(next: ExpedienteFolder) {
+    setFolders(state => state.some(item => item.id === next.id) ? state : [...state, next])
+    setSelected(next.id)
+    setAdding(false)
+  }
+  return <section className="documents-panel tree-panel">
+    <div className="detail-panel-heading">
+      <div><p className="eyebrow">ARCHIVO DEL EXPEDIENTE</p><h3>Documentos</h3></div>
+    </div>
+    <div className="folder-bar">
+      <div className="folder-tabs" role="tablist" aria-label="Carpetas del expediente">
+        {folders.map(item => <button key={item.id} type="button" role="tab" id={`folder-tab-${item.id}`} aria-selected={item.id === selected} aria-controls="folder-panel" className={`folder-tab${item.id === selected ? ' is-active' : ''}`} onClick={() => setSelected(item.id)}><Icon name="folder"/> {item.name}</button>)}
+        {loading && !folders.length && <span className="tree-empty-inline" role="status">Cargando carpetas…</span>}
+      </div>
+      <div className="folder-bar-actions">
+        <button type="button" className="secondary tree-refresh" disabled={loading} onClick={() => setRefresh(value => value + 1)} aria-label="Actualizar carpetas" title="Actualizar carpetas"><Icon name="refresh"/></button>
+        <LockedTip locked={locked}><button type="button" className="secondary folder-add" disabled={locked || loading} onClick={() => setAdding(true)}><Icon name="folderPlus"/> Añadir carpeta</button></LockedTip>
+      </div>
+    </div>
+    {locked && <p className="tree-locked-banner" role="note"><Icon name="lock"/> Expediente cerrado · solo lectura. Reábrelo para agregar o modificar carpetas, secciones y documentos.</p>}
+    {error && <p className="api-error tree-notice" role="alert">{error} <button type="button" className="row-link" onClick={() => setRefresh(value => value + 1)}>Reintentar</button></p>}
+    {folder ? <div id="folder-panel" role="tabpanel" aria-labelledby={`folder-tab-${folder.id}`}><FolderTree key={folder.id} expedienteId={expedienteId} folder={folder} locked={locked}/></div>
+      : !loading && !error && <div className="documents-empty">
+        <span aria-hidden="true"><Icon name="folder" size={28}/></span>
+        <h4>Este expediente no tiene carpetas</h4>
+        <p>Añade una carpeta para organizar sus secciones y documentos.</p>
+        <LockedTip locked={locked}><button type="button" className="primary" disabled={locked} onClick={() => setAdding(true)}><Icon name="plus"/> Añadir carpeta</button></LockedTip>
+      </div>}
+    {adding && <Modal eyebrow="CARPETAS" title="Añadir carpeta" description="Cada expediente tiene como máximo una carpeta de cada tipo." onClose={() => setAdding(false)}>
+      <FolderForm expedienteId={expedienteId} folders={folders} onCancel={() => setAdding(false)} onCreated={created}/>
+    </Modal>}
+  </section>
+}
+
+function FolderTree({ expedienteId, folder, locked }: { expedienteId: number; folder: ExpedienteFolder; locked: boolean }) {
   const [sections, setSections] = useState<ExpedienteSection[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [docs, setDocs] = useState<Record<number, DocsState>>({})
-  const [types, setTypes] = useState<string[]>(defaultTypes)
   const [sectionDialog, setSectionDialog] = useState<SectionDialog | null>(null)
   const [documentDialog, setDocumentDialog] = useState<DocumentDialog | null>(null)
   const [confirm, setConfirm] = useState<Confirm | null>(null)
@@ -236,13 +319,10 @@ export default function CaseDocuments({ expedienteId, locked = false }: { expedi
   useEffect(() => { if (locked) { setSectionDialog(null); setDocumentDialog(null); setConfirm(null) } }, [locked])
   const expandedRef = useRef(expanded)
   useEffect(() => { expandedRef.current = expanded }, [expanded])
-
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 3500); return () => clearTimeout(timer) }, [notice])
-  useEffect(() => {
-    let current = true
-    documentsService.types().then(rows => { if (current && rows.length) setTypes(rows.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.id - b.id).map(row => row.name)) }).catch(() => { /* Se usan las sugerencias por defecto. */ })
-    return () => { current = false }
-  }, [])
+
+  // El tipo es texto libre: se sugieren los habituales y los ya usados en la carpeta.
+  const types = useMemo(() => [...new Set([...defaultTypes, ...sections.map(item => item.type).filter(Boolean)])], [sections])
 
   const loadDocs = useCallback((sectionId: number) => {
     setDocs(state => ({ ...state, [sectionId]: { items: state[sectionId]?.items ?? [], loading: true, error: '' } }))
@@ -254,7 +334,7 @@ export default function CaseDocuments({ expedienteId, locked = false }: { expedi
   useEffect(() => {
     let current = true
     setLoading(true); setError('')
-    sectionsService.list(expedienteId).then(rows => {
+    foldersService.sections(expedienteId, folder.id).then(rows => {
       if (!current) return
       setSections(rows)
       const ids = new Set(rows.map(row => row.id))
@@ -272,19 +352,16 @@ export default function CaseDocuments({ expedienteId, locked = false }: { expedi
       }
     }).catch(caught => { if (current) setError(errorMessage(caught)) }).finally(() => { if (current) setLoading(false) })
     return () => { current = false }
-  }, [expedienteId, refresh, loadDocs])
+  }, [expedienteId, folder.id, refresh, loadDocs])
 
-  // Árbol a partir del ID del padre; hermanas por sort_order e ID.
-  const childrenOf = useMemo(() => {
-    const ids = new Set(sections.map(item => item.id))
-    const map = new Map<number | null, ExpedienteSection[]>()
-    for (const item of sections) {
-      const parent = item.expediente_section_parent_id != null && ids.has(item.expediente_section_parent_id) ? item.expediente_section_parent_id : null
-      map.set(parent, [...(map.get(parent) || []), item])
-    }
-    map.forEach(list => list.sort((a, b) => a.sort_order - b.sort_order || a.id - b.id))
-    return (id: number | null) => map.get(id) || []
-  }, [sections])
+  const tree = useMemo(() => buildSectionTree(sections), [sections])
+  const nodes = useMemo(() => {
+    const map = new Map<number, SectionNode>()
+    const walk = (items: SectionNode[]) => items.forEach(item => { map.set(item.id, item); walk(item.children) })
+    walk(tree)
+    return map
+  }, [tree])
+  const siblingsOf = (section: ExpedienteSection) => section.expediente_section_parent_id != null && nodes.has(section.expediente_section_parent_id) ? nodes.get(section.expediente_section_parent_id)!.children : tree
 
   function toggle(section: ExpedienteSection) {
     const next = new Set(expanded)
@@ -301,14 +378,15 @@ export default function CaseDocuments({ expedienteId, locked = false }: { expedi
   async function saveSection(values: { name: string; type: string; document_date: string; color_hex: string; sort_order: number; parent: number | null }) {
     if (!sectionDialog) return
     if (sectionDialog.mode === 'create') {
-      const created = await sectionsService.create(expedienteId, { name: values.name, type: values.type, document_date: values.document_date || undefined, color_hex: values.color_hex, sort_order: values.sort_order, expediente_section_parent_id: sectionDialog.parent?.id ?? null })
+      // Siempre se envía la carpeta seleccionada.
+      const created = await sectionsService.create(expedienteId, { expediente_folder_id: folder.id, name: values.name, type: values.type, document_date: values.document_date || undefined, color_hex: values.color_hex, sort_order: values.sort_order, expediente_section_parent_id: sectionDialog.parent?.id ?? null })
       setSections(state => [...state, created])
       setExpanded(state => new Set([...state, created.id, ...(sectionDialog.parent ? [sectionDialog.parent.id] : [])]))
       setDocs(state => ({ ...state, [created.id]: { items: [], loading: false, error: '' } }))
       setNotice(`Sección “${created.name}” creada.`)
     } else {
       const original = sectionDialog.section
-      const patch: Record<string, unknown> = {}
+      const patch: SectionInput = {}
       if (values.name.trim() !== original.name) patch.name = values.name
       if (values.type.trim() !== original.type) patch.type = values.type
       if ((values.document_date || null) !== (original.document_date || null)) patch.document_date = values.document_date || null
@@ -325,7 +403,7 @@ export default function CaseDocuments({ expedienteId, locked = false }: { expedi
   }
 
   async function move(section: ExpedienteSection, direction: -1 | 1) {
-    const siblings = [...childrenOf(section.expediente_section_parent_id ?? null)]
+    const siblings = [...siblingsOf(section)]
     const index = siblings.findIndex(item => item.id === section.id)
     const target = index + direction
     if (index < 0 || target < 0 || target >= siblings.length) return
@@ -340,7 +418,7 @@ export default function CaseDocuments({ expedienteId, locked = false }: { expedi
   }
 
   function askDeleteSection(section: ExpedienteSection) {
-    if (childrenOf(section.id).length) { setError(`“${section.name}” tiene subsecciones. Muévelas o elimínalas antes de borrar la sección.`); return }
+    if (nodes.get(section.id)?.children.length) { setError(`“${section.name}” tiene subsecciones. Muévelas o elimínalas antes de borrar la sección.`); return }
     setConfirmError('')
     setConfirm({
       title: 'Eliminar sección', confirmLabel: 'Eliminar sección',
@@ -370,7 +448,8 @@ export default function CaseDocuments({ expedienteId, locked = false }: { expedi
     try { await confirm.action(); setConfirm(null) } catch (caught) { setConfirmError(errorMessage(caught)) } finally { setConfirmBusy(false) }
   }
 
-  const replaceDocument = (document: DocumentRecord) => setDocs(state => Object.fromEntries(Object.entries(state).map(([key, value]) => [key, { ...value, items: value.items.map(item => item.id === document.id ? { ...item, ...document } : item) }])))
+  // Un documento puede estar en varias secciones: el cambio se refleja en todas.
+  const replaceDocument = (document: Partial<DocumentRecord> & { id: number }) => setDocs(state => Object.fromEntries(Object.entries(state).map(([key, value]) => [key, { ...value, items: value.items.map(item => item.id === document.id ? { ...item, ...document } : item) }])))
   async function createDocument(section: ExpedienteSection, name: string, file: File | null, retryId: number | null, setRetry: (id: number) => void, setStatus: (text: string) => void) {
     let document: DocumentRecord | null = null
     if (retryId === null) {
@@ -388,8 +467,8 @@ export default function CaseDocuments({ expedienteId, locked = false }: { expedi
   }
   async function editDocument(document: DocumentRecord, name: string, file: File | null, setStatus: (text: string) => void) {
     let result = document
-    if (name.trim() !== document.name) result = await documentsService.update(document.id, { name })
-    if (file) { setStatus('Subiendo archivo…'); result = await documentsService.uploadFile(document.id, file) }
+    if (name.trim() !== document.name) result = { ...result, ...await documentsService.update(document.id, { name }) }
+    if (file) { setStatus('Subiendo archivo…'); result = { ...result, ...await documentsService.uploadFile(document.id, file) } }
     replaceDocument(result)
     setDocumentDialog(null)
     if (result !== document) setNotice('Documento actualizado.')
@@ -401,9 +480,9 @@ export default function CaseDocuments({ expedienteId, locked = false }: { expedi
     setNotice('Documento vinculado.')
   }
 
-  function renderSection(section: ExpedienteSection, depth: number, index: number, siblings: number, prefix = ''): ReactNode {
+  function renderSection(section: SectionNode, depth: number, index: number, siblings: number, prefix = ''): ReactNode {
     const number = prefix ? `${prefix}.${index + 1}` : String(index + 1)
-    const children = childrenOf(section.id)
+    const children = section.children
     const isOpen = expanded.has(section.id)
     const state = docs[section.id]
     const count = state && !state.loading && !state.error ? state.items.length : null
@@ -451,30 +530,28 @@ export default function CaseDocuments({ expedienteId, locked = false }: { expedi
     </li>
   }
 
-  const roots = childrenOf(null)
   const activeSection = documentDialog?.mode === 'create' ? documentDialog.section : null
-  return <section className="documents-panel tree-panel">
-    <div className="detail-panel-heading">
-      <div><p className="eyebrow">ARCHIVO DEL EXPEDIENTE</p><h3>Documentos</h3></div>
+  return <>
+    <div className="folder-toolbar">
+      <p><Icon name="folder"/> <strong>{folder.name}</strong>{!loading && <span> · {sections.length} {sections.length === 1 ? 'sección' : 'secciones'}</span>}</p>
       <div className="documents-actions">
         {sections.length > 0 && <button type="button" className="secondary" onClick={() => expandAll(expanded.size < sections.length)}>{expanded.size < sections.length ? 'Expandir todo' : 'Contraer todo'}</button>}
-        <button type="button" className="secondary tree-refresh" disabled={loading} onClick={() => setRefresh(value => value + 1)} aria-label="Actualizar" title="Actualizar"><Icon name="refresh"/></button>
+        <button type="button" className="secondary tree-refresh" disabled={loading} onClick={() => setRefresh(value => value + 1)} aria-label="Actualizar secciones" title="Actualizar secciones"><Icon name="refresh"/></button>
         <LockedTip locked={locked}><button type="button" className="primary" disabled={locked} onClick={() => setSectionDialog({ mode: 'create', parent: null })}><Icon name="plus"/> Nueva sección</button></LockedTip>
       </div>
     </div>
-    {locked && <p className="tree-locked-banner" role="note"><Icon name="lock"/> Expediente cerrado · solo lectura. Reábrelo para agregar o modificar secciones y documentos.</p>}
     {notice && <p className="api-success tree-notice" role="status">{notice}</p>}
     {error && <p className="api-error tree-notice" role="alert">{error}</p>}
     {loading && !sections.length ? <div className="empty-state" role="status">Cargando secciones…</div>
-      : roots.length ? <ul className="tree-root">{roots.map((section, index) => renderSection(section, 0, index, roots.length))}</ul>
+      : tree.length ? <ul className="tree-root">{tree.map((section, index) => renderSection(section, 0, index, tree.length))}</ul>
       : !error && <div className="documents-empty">
         <span aria-hidden="true"><Icon name="folderPlus" size={28}/></span>
-        <h4>Organiza el expediente en secciones</h4>
+        <h4>Organiza la carpeta en secciones</h4>
         <p>Crea secciones como “Denuncia” o “Resoluciones” y agrega sus documentos y subsecciones.</p>
         <LockedTip locked={locked}><button type="button" className="primary" disabled={locked} onClick={() => setSectionDialog({ mode: 'create', parent: null })}><Icon name="plus"/> Crear primera sección</button></LockedTip>
       </div>}
 
-    {sectionDialog && <Modal eyebrow={`EXPEDIENTE #${expedienteId}`} title={sectionDialog.mode === 'edit' ? 'Editar sección' : sectionDialog.parent ? 'Nueva subsección' : 'Nueva sección'} description={sectionDialog.mode === 'edit' ? 'Cambia sus datos, muévela a otra ubicación o ajusta su orden.' : 'El tipo y la fecha se guardan en la sección y aplican a sus documentos.'} onClose={() => setSectionDialog(null)}>
+    {sectionDialog && <Modal eyebrow={folder.name} title={sectionDialog.mode === 'edit' ? 'Editar sección' : sectionDialog.parent ? 'Nueva subsección' : 'Nueva sección'} description={sectionDialog.mode === 'edit' ? 'Cambia sus datos, muévela dentro de esta carpeta o ajusta su orden.' : 'El tipo y la fecha se guardan en la sección y aplican a sus documentos.'} onClose={() => setSectionDialog(null)}>
       <SectionForm dialog={sectionDialog} sections={sections} types={types} onCancel={() => setSectionDialog(null)} onSubmit={saveSection}/>
     </Modal>}
     {documentDialog && <Modal eyebrow={activeSection ? activeSection.name.toUpperCase() : 'DOCUMENTO'} title={documentDialog.mode === 'edit' ? 'Editar documento' : 'Agregar documento'} description={documentDialog.mode === 'edit' ? 'Cambia el nombre o reemplaza su archivo.' : 'Crea un documento nuevo o reutiliza uno ya registrado en el expediente.'} onClose={() => setDocumentDialog(null)}>
@@ -490,5 +567,5 @@ export default function CaseDocuments({ expedienteId, locked = false }: { expedi
         <div className="case-create-actions"><button type="button" className="secondary" disabled={confirmBusy} onClick={() => setConfirm(null)}>Cancelar</button><button type="button" className="primary tree-danger" disabled={confirmBusy} onClick={() => void runConfirm()}>{confirmBusy ? 'Procesando…' : confirm.confirmLabel}</button></div>
       </div>
     </Modal>}
-  </section>
+  </>
 }

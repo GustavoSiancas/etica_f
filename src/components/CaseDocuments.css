@@ -202,3 +202,22 @@
 .locked-tip:hover::after, .locked-tip:focus-visible::after { opacity: 1; transform: translateY(0); }
 .documents-empty .locked-tip:hover::after, .documents-empty .locked-tip:focus-visible::after { transform: translate(50%, 0); }
 .tree-panel { overflow: visible !important; }
+
+/* Carpetas del expediente: pestañas sobre el árbol de secciones */
+.folder-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 14px 20px 0; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.folder-tabs { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.folder-tab {
+  display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 6px 12px; border-radius: 9px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); font-size: 13px; font-weight: 600; letter-spacing: .01em;
+}
+.folder-tab:hover { border-color: var(--border-strong); color: var(--text); }
+.folder-tab.is-active { border-color: var(--action); background: var(--accent-soft); color: var(--accent-text); box-shadow: 0 0 0 1px var(--action) inset; }
+.folder-bar-actions { display: flex; align-items: center; gap: 8px; }
+.folder-bar-actions .secondary { margin: 0; }
+.folder-add { display: inline-flex; align-items: center; gap: 7px; }
+.folder-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 14px 20px 0; }
+.folder-toolbar > p { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 13.5px; color: var(--text-muted); }
+.folder-toolbar > p strong { color: var(--text); }
+.folder-toolbar .documents-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.folder-toolbar .documents-actions .primary, .folder-toolbar .documents-actions .secondary { margin: 0; }
+@media (max-width: 640px) { .folder-bar, .folder-toolbar { margin: 12px 12px 0; } }

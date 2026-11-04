@@ -21,15 +21,28 @@ export default function CaseCreateDialog({ onClose, onCreated }: { onClose: () =
   const [selected, setSelected] = useState<Record<Role, Person[]>>({ denunciantes: [], denunciados: [] })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // Aviso antes de crear sin denunciantes y/o sin denunciados (se permite, pero no es lo habitual).
+  const [confirmMissing, setConfirmMissing] = useState(false)
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !busy) onClose() }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || busy) return
+      if (confirmMissing) setConfirmMissing(false)
+      else onClose()
+    }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [busy, onClose])
+  }, [busy, onClose, confirmMissing])
+  const noDenunciantes = selected.denunciantes.length === 0
+  const noDenunciados = selected.denunciados.length === 0
   async function submit(event: FormEvent) {
     event.preventDefault()
     if (!initType) { setStep(1); return }
     if (step === 1) { setStep(2); return }
+    if (noDenunciantes || noDenunciados) { setConfirmMissing(true); return }
+    await create()
+  }
+  async function create() {
+    setConfirmMissing(false)
     setBusy(true); setError('')
     try {
       const file = await expedientesService.create({ description, opening_date: openingDate, init_type: initType as InitiationType, denunciante_ids: selected.denunciantes.map(person => person.id), denunciado_ids: selected.denunciados.map(person => person.id) })
@@ -80,5 +93,21 @@ export default function CaseCreateDialog({ onClose, onCreated }: { onClose: () =
         </div>
       </div>
     </form>
+    {confirmMissing && <div className="cc-confirm-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setConfirmMissing(false) }}>
+      <div className="cc-confirm" role="alertdialog" aria-modal="true" aria-labelledby="cc-confirm-title" aria-describedby="cc-confirm-text">
+        <span className="cc-confirm-icon" aria-hidden="true">!</span>
+        <h3 id="cc-confirm-title">{noDenunciantes && noDenunciados ? 'Expediente sin participantes' : noDenunciantes ? 'Expediente sin denunciantes' : 'Expediente sin denunciados'}</h3>
+        <p id="cc-confirm-text">
+          ¿Estás seguro de crear este expediente sin {noDenunciantes && noDenunciados ? 'denunciantes ni denunciados' : noDenunciantes ? 'denunciantes' : 'denunciados'}?
+          {' '}Se puede hacer, pero no es lo recomendado.
+        </p>
+        <div className="cc-confirm-actions">
+          <button type="button" className="secondary" autoFocus onClick={() => { setConfirmMissing(false); setTab(noDenunciantes ? 'denunciantes' : 'denunciados') }}>
+            Volver y agregar
+          </button>
+          <button type="button" className="primary cc-confirm-go" onClick={() => void create()}>Sí, crear de todos modos</button>
+        </div>
+      </div>
+    </div>}
   </section></div>
 }

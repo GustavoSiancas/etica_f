@@ -127,3 +127,33 @@
 }
 .cc-body select.is-placeholder { color: var(--text-subtle) !important; }
 .cc-body select option { color: var(--text); }
+
+/* Aviso: crear sin denunciantes y/o denunciados */
+.cc-dialog { position: relative; }
+.cc-confirm-backdrop {
+  position: fixed; inset: 0; z-index: 1000;
+  display: grid; place-items: center; padding: 20px;
+  background: color-mix(in srgb, #000 45%, transparent);
+
+  animation: fadeIn .15s ease;
+}
+.cc-confirm {
+  width: min(420px, 100%);
+  padding: 24px;
+  border: 1px solid var(--warning-border, var(--border));
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-md, 0 12px 32px #0006);
+  text-align: center;
+}
+.cc-confirm-icon {
+  width: 44px; height: 44px; margin: 0 auto 12px;
+  display: grid; place-items: center; border-radius: 50%;
+  background: var(--warning-soft); color: var(--warning-text);
+  border: 1px solid var(--warning-border, transparent);
+  font-size: 22px; font-weight: 700;
+}
+.cc-confirm h3 { margin: 0 0 8px; font-size: 17px; font-weight: 600; color: var(--text); }
+.cc-confirm p { margin: 0 0 20px; font-size: 14px; line-height: 1.55; color: var(--text-muted); }
+.cc-confirm-actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.cc-confirm-actions button { margin: 0; }

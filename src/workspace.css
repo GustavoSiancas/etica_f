@@ -139,3 +139,17 @@ body { font-size: 14px; }
 .case-description-form { display: grid; gap: 8px; }
 .case-description-form textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; }
 .case-description-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Botón "Volver" dentro del recuadro del expediente */
+.case-hero-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.case-hero-top .eyebrow { margin: 0; }
+.case-back {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px 5px 8px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface-alt); color: var(--text-muted);
+  font-size: 12.5px; font-weight: 500; cursor: pointer;
+}
+.case-back:hover { color: var(--text); border-color: var(--border-strong); }
+.case-back:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+.case-hero-top + .case-number { margin-top: 12px; }
+.management .case-hero { margin-top: 0; }

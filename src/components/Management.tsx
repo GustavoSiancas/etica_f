@@ -373,12 +373,14 @@ function CaseDetail({
           onClose={() => setMessage(null)}
         />
       )}
-      <button className="secondary" onClick={onBack}>
-        ← {backLabel}
-      </button>
       <section className="case-summary case-hero">
         <div className="case-summary-main">
-          <p className="eyebrow">EXPEDIENTE</p>
+          <div className="case-hero-top">
+            <button type="button" className="case-back" onClick={onBack} title={backLabel}>
+              <span aria-hidden="true">←</span> {backLabel}
+            </button>
+            <p className="eyebrow">EXPEDIENTE</p>
+          </div>
           <h2 className="case-number">{formatCaseNumber(file.number)}</h2>
           <dl>
             <div>

@@ -5,7 +5,6 @@ import {
   formatCal,
   formatCaseNumber,
   initiationTypes,
-  locationLabel,
   peruDate,
   personasService,
   statusLabel,
@@ -15,7 +14,6 @@ import type { CaseRef, Route } from '../router'
 import CaseCreateDialog from './CaseCreateDialog'
 import PeopleRegistry from './PeopleRegistry'
 import ParticipantProfile from './ParticipantProfile'
-import useLocations from './useLocations'
 import CaseRow from './CaseRow'
 import { useAltCaseView } from '../caseView'
 import type { ActiveParticipant, CaseFile, CaseStatus, Person, Role, InitiationType } from '../services/api'
@@ -419,18 +417,15 @@ export default function Management({ route }: { route: ManagementRoute }) {
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
   const [status, setStatus] = useState<CaseStatus | ''>('')
-  const [location, setLocation] = useState('')
   const [range, setRange] = useState({ from: '', to: '' })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const locations = useLocations()
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
       const page = await expedientesService.page(pageSize, offset, {
         status,
-        location,
         from: range.from,
         to: range.to,
       })
@@ -443,7 +438,7 @@ export default function Management({ route }: { route: ManagementRoute }) {
     } finally {
       setLoading(false)
     }
-  }, [offset, status, location, range])
+  }, [offset, status, range])
   const showList = route.name === 'expedientes' && !route.caseRef
   useEffect(() => {
     if (showList) void load()
@@ -452,16 +447,15 @@ export default function Management({ route }: { route: ManagementRoute }) {
   const personId = route.name === 'personas' ? route.personId : null
   const person = usePerson(peopleRole, personId)
   const openCase = (file: CaseFile) => navigate(paths.caseFile(file.id), { state: { caseFile: file } })
-  const filtered = status !== '' || location !== '' || range.from !== '' || range.to !== ''
+  const filtered = status !== '' || range.from !== '' || range.to !== ''
   const rangeInvalid = range.from !== '' && range.to !== '' && range.from > range.to
-  const filterBy = (next: { status?: CaseStatus | ''; location?: string; from?: string; to?: string }) => {
+  const filterBy = (next: { status?: CaseStatus | ''; from?: string; to?: string }) => {
     setOffset(0)
     if (next.status !== undefined) setStatus(next.status)
-    if (next.location !== undefined) setLocation(next.location)
     if (next.from !== undefined || next.to !== undefined)
       setRange(current => ({ from: next.from ?? current.from, to: next.to ?? current.to }))
   }
-  const clearFilters = () => filterBy({ status: '', location: '', from: '', to: '' })
+  const clearFilters = () => filterBy({ status: '', from: '', to: '' })
 
   if (route.name === 'personas') {
     // Registro → ficha de la persona → detalle del expediente. El registro queda montado (oculto) para conservar filtros y página.
@@ -545,22 +539,6 @@ export default function Management({ route }: { route: ManagementRoute }) {
             ))}
           </div>
           <div className="case-list-actions">
-            <label className="visually-hidden" htmlFor="case-location-filter">
-              Ubicación
-            </label>
-            <select
-              id="case-location-filter"
-              className="case-location-filter"
-              value={location}
-              onChange={event => filterBy({ location: event.target.value })}
-            >
-              <option value="">Todas las ubicaciones</option>
-              {locations.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
             <div
               className={`profile-range${rangeInvalid ? ' is-invalid' : ''}`}
               role="group"
@@ -612,7 +590,6 @@ export default function Management({ route }: { route: ManagementRoute }) {
                   <th>Expediente</th>
                   <th>Fecha de apertura</th>
                   <th>Tipo de inicio</th>
-                  <th>Ubicación</th>
                   <th>Estado</th>
                 </tr>
               </thead>
@@ -624,7 +601,6 @@ export default function Management({ route }: { route: ManagementRoute }) {
                     </td>
                     <td>{peruDate(file.opening_date) || 'Sin fecha'}</td>
                     <td>{initiationTypes[file.init_type as InitiationType] || file.init_type}</td>
-                    <td>{locationLabel(file.location)}</td>
                     <td>
                       <span className="status" data-status={file.status}>
                         {statusLabel(file.status)}

@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { caseStatuses, expedientesService, formatCal, formatCaseNumber, initiationTypes, locationLabel, statusLabel } from '../services/api'
+import { caseStatuses, expedientesService, formatCal, formatCaseNumber, initiationTypes, statusLabel } from '../services/api'
 import type { CaseFile, CaseFilters, CaseStatus, InitiationType, Person, Role } from '../services/api'
 import CaseRow from './CaseRow'
-import useLocations from './useLocations'
 
 const pageSize = 20
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'No se pudieron consultar los expedientes.'
-const emptyFilters = { status: '' as CaseStatus | '', location: '', from: '', to: '' }
+const emptyFilters = { status: '' as CaseStatus | '', from: '', to: '' }
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/)
@@ -20,7 +19,6 @@ function formatDate(value?: string | null) {
 
 export default function ParticipantProfile({ role, person, onBack, onOpenCase }: { role: Role; person: Person; onBack: () => void; onOpenCase: (file: CaseFile) => void }) {
   const singular = role === 'denunciantes' ? 'Denunciante' : 'Denunciado'
-  const locations = useLocations()
   const [filters, setFilters] = useState(emptyFilters)
   const [offset, setOffset] = useState(0)
   const [refresh, setRefresh] = useState(0)
@@ -41,7 +39,7 @@ export default function ParticipantProfile({ role, person, onBack, onOpenCase }:
   useEffect(() => {
     let current = true
     setLoading(true); setError('')
-    const query: CaseFilters = { status: filters.status, location: filters.location, from: filters.from, to: filters.to }
+    const query: CaseFilters = { status: filters.status, from: filters.from, to: filters.to }
     expedientesService.byParticipant(role, person.id, pageSize, offset, query)
       .then(result => { if (current) setPage(result) })
       .catch(caught => { if (current) { setError(errorMessage(caught)); setPage(null) } })
@@ -50,7 +48,7 @@ export default function ParticipantProfile({ role, person, onBack, onOpenCase }:
   }, [role, person.id, offset, filters, refresh])
 
   const update = (patch: Partial<typeof emptyFilters>) => { setOffset(0); setFilters(current => ({ ...current, ...patch })) }
-  const filtered = filters.status !== '' || filters.location !== '' || filters.from !== '' || filters.to !== ''
+  const filtered = filters.status !== '' || filters.from !== '' || filters.to !== ''
   const rangeError = filters.from && filters.to && filters.from > filters.to
   const value = (n?: number) => counts ? n : '—'
 
@@ -82,7 +80,6 @@ export default function ParticipantProfile({ role, person, onBack, onOpenCase }:
           <div className="status-filter" role="group" aria-label="Filtrar por estado">
             {([['', 'Todos'], ...caseStatuses.map(option => [option.value, option.label])] as [CaseStatus | '', string][]).map(([status, label]) => <button key={status || 'all'} type="button" className={`status-filter-button${filters.status === status ? ' active' : ''}`} aria-pressed={filters.status === status} onClick={() => update({ status })}>{label}</button>)}
           </div>
-          <select aria-label="Ubicación" value={filters.location} onChange={event => update({ location: event.target.value })}><option value="">Todas las ubicaciones</option>{locations.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
           <div className={`profile-range${rangeError ? ' is-invalid' : ''}`} role="group" aria-label="Fecha de apertura">
             <label><span>Desde</span><input type="date" value={filters.from} max={filters.to || undefined} onChange={event => update({ from: event.target.value })}/></label>
             <label><span>Hasta</span><input type="date" value={filters.to} min={filters.from || undefined} onChange={event => update({ to: event.target.value })}/></label>
@@ -93,12 +90,11 @@ export default function ParticipantProfile({ role, person, onBack, onOpenCase }:
       {error && <p className="api-error profile-error" role="alert">{error} <button type="button" className="row-link" onClick={() => setRefresh(n => n + 1)}>Reintentar</button></p>}
       {loading && !page ? <div className="empty-state" role="status">Cargando expedientes…</div>
         : page && page.data.length ? <div className={`table-scroll${loading ? ' is-refreshing' : ''}`}><table>
-          <thead><tr><th>Expediente</th><th>Fecha de apertura</th><th>Tipo de inicio</th><th>Ubicación</th><th>Estado</th><th aria-label="Abrir"/></tr></thead>
+          <thead><tr><th>Expediente</th><th>Fecha de apertura</th><th>Tipo de inicio</th><th>Estado</th><th aria-label="Abrir"/></tr></thead>
           <tbody>{page.data.map(file => <CaseRow key={file.id} file={file} onOpen={onOpenCase}>
             <td><strong>{formatCaseNumber(file.number)}</strong>{file.description && <small className="profile-case-desc">{file.description}</small>}</td>
             <td>{formatDate(file.opening_date)}</td>
             <td>{file.init_type ? initiationTypes[file.init_type as InitiationType] || file.init_type : 'Sin tipo'}</td>
-            <td>{locationLabel(file.location)}</td>
             <td><span className="status" data-status={file.status}>{statusLabel(file.status)}</span></td>
             <td className="profile-open">Ver →</td>
           </CaseRow>)}</tbody>

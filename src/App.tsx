@@ -6,7 +6,6 @@ import {
   expedientesService,
   formatCaseNumber,
   initiationTypes,
-  locationLabel,
   statusLabel,
 } from './services/api'
 import type { CaseFile, InitiationType, Role } from './services/api'
@@ -184,7 +183,6 @@ function Dashboard({
                 <tr>
                   <th>Expediente</th>
                   <th>Tipo de inicio</th>
-                  <th>Ubicación</th>
                   <th>Estado</th>
                 </tr>
               </thead>
@@ -195,7 +193,6 @@ function Dashboard({
                       <strong>{formatCaseNumber(file.number)}</strong>
                     </td>
                     <td>{initiationTypes[file.init_type as InitiationType] || file.init_type}</td>
-                    <td>{locationLabel(file.location)}</td>
                     <td>
                       <span className="status" data-status={file.status}>
                         {statusLabel(file.status)}

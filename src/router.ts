@@ -12,6 +12,7 @@ export type Route =
   | { name: 'expedientes'; creating: boolean; caseRef: CaseRef | null }
   | { name: 'personas'; role: Role; personId: number | null; caseRef: CaseRef | null }
   | { name: 'folder-types' }
+  | { name: 'carpetas' }
   | { name: 'not-found' }
 
 // Datos que viajan con la entrada del historial para no volver a consultarlos (sobreviven a recargar la página).
@@ -48,6 +49,7 @@ export function parseRoute(pathname: string): Route {
     return { name: 'not-found' }
   }
   if (!parts.length) return { name: 'dashboard' }
+  if (parts.length === 1 && parts[0] === 'carpetas') return { name: 'carpetas' }
   if (parts.length === 2 && parts[0] === 'admin' && parts[1] === 'tipos-carpeta') return { name: 'folder-types' }
   if (parts[0] === 'expedientes') {
     if (parts.length === 1) return { name: 'expedientes', creating: false, caseRef: null }
@@ -77,6 +79,7 @@ export const paths = {
   people: (role: Role) => `/${role}`,
   person: (role: Role, personId: number) => `/${role}/${personId}`,
   folderTypes: () => '/admin/tipos-carpeta',
+  folders: () => '/carpetas',
 }
 
 export function navigate(path: string, options: { replace?: boolean; state?: RouteState } = {}) {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Management from './components/Management'
 import FolderTypesAdmin from './components/FolderTypesAdmin'
+import FoldersList from './components/FoldersList'
 import CaseRow from './components/CaseRow'
 import {
   expedientesService,
@@ -21,10 +22,11 @@ import './components/CaseDocuments.css'
 import './components/CaseCreateDialog.css'
 import './components/ParticipantProfile.css'
 
-type View = 'dashboard' | 'expedientes' | 'personas'
+type View = 'dashboard' | 'expedientes' | 'carpetas' | 'personas'
 const views = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid' },
   { id: 'expedientes', label: 'Expedientes', icon: 'folder' },
+  { id: 'carpetas', label: 'Carpetas', icon: 'folders' },
   { id: 'personas', label: 'Personas', icon: 'users' },
 ] as const
 function Icon({ name }: { name: string }) {
@@ -58,6 +60,11 @@ function Icon({ name }: { name: string }) {
           <rect x="14" y="3" width="7" height="7" rx="1.5" />
           <rect x="3" y="14" width="7" height="7" rx="1.5" />
           <rect x="14" y="14" width="7" height="7" rx="1.5" />
+        </>
+      ) : name === 'folders' ? (
+        <>
+          <path d="M7 7V5a2 2 0 0 1 2-2h4l2 2h5a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-1" />
+          <path d="M2 11V9a2 2 0 0 1 2-2h4l2 2h5a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8Z" />
         </>
       ) : name === 'folder' ? (
         <path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
@@ -224,7 +231,12 @@ function Dashboard({
   )
 }
 const viewOf = (route: Route): View | null =>
-  route.name === 'dashboard' || route.name === 'expedientes' || route.name === 'personas' ? route.name : null
+  route.name === 'dashboard' ||
+  route.name === 'expedientes' ||
+  route.name === 'carpetas' ||
+  route.name === 'personas'
+    ? route.name
+    : null
 
 function NotFound() {
   return (
@@ -283,7 +295,9 @@ export default function App() {
         ? paths.dashboard()
         : next === 'expedientes'
           ? paths.cases()
-          : paths.people(peopleRole),
+          : next === 'carpetas'
+            ? paths.folders()
+            : paths.people(peopleRole),
     )
   }
   const sectionLabel =
@@ -436,6 +450,8 @@ export default function App() {
               create={() => go(paths.newCase())}
               open={selected => navigate(paths.caseFile(selected.id), { state: { caseFile: selected } })}
             />
+          ) : route.name === 'carpetas' ? (
+            <FoldersList />
           ) : route.name === 'folder-types' ? (
             <FolderTypesAdmin />
           ) : route.name === 'not-found' ? (

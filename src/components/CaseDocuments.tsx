@@ -1026,9 +1026,12 @@ export default function CaseDocuments({
                 <strong>{folderName(item.name)}</strong>
                 <small>
                   {item.status && (
-                    <span className={`folder-tab-status${item.status === 'CERRADO' ? ' is-closed' : ''}`}>
+                    <span
+                      className={`folder-tab-status${item.status === 'CERRADO' ? ' is-closed' : ''}`}
+                      title={statusLabel(item.status)}
+                    >
                       {item.status === 'CERRADO' ? <Icon name="lock" size={11} /> : <i aria-hidden="true" />}
-                      {statusLabel(item.status)}
+                      <span className="visually-hidden">{statusLabel(item.status)}</span>
                     </span>
                   )}
                   {item.opening_date && <span>{formatDate(peruDate(item.opening_date))}</span>}
@@ -1065,6 +1068,7 @@ export default function CaseDocuments({
       </div>
       {folder ? (
         <div
+          key={folder.id}
           id="folder-panel"
           className={`folder-sheet${folder.id === folders[0]?.id ? ' is-first' : ''}`}
           role="tabpanel"
@@ -1230,7 +1234,7 @@ function FolderTree({
         } else {
           const keep = [...expandedRef.current].filter(id => ids.has(id))
           setExpanded(new Set(keep))
-          setDocs({})
+          setDocs(state => Object.fromEntries(keep.filter(id => state[id]).map(id => [id, state[id]])))
           keep.forEach(loadDocs)
         }
       })
@@ -1595,10 +1599,11 @@ function FolderTree({
         </div>
         {isOpen && (
           <div className="tree-body">
-            {!state || state.loading ? (
-              <p className="tree-empty-inline" role="status">
-                Cargando documentos…
-              </p>
+            {!state || (state.loading && !state.items.length) ? (
+              <div className="tree-skeleton is-docs" role="status" aria-label="Cargando documentos">
+                <span />
+                <span />
+              </div>
             ) : state.error ? (
               <p className="api-error" role="alert">
                 {state.error}{' '}
@@ -1803,8 +1808,10 @@ function FolderTree({
         </p>
       )}
       {loading && !sections.length ? (
-        <div className="empty-state" role="status">
-          Cargando secciones…
+        <div className="tree-skeleton" role="status" aria-label="Cargando secciones">
+          <span />
+          <span />
+          <span />
         </div>
       ) : tree.length ? (
         <ul className="tree-root">

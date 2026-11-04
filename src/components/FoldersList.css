@@ -1,0 +1,81 @@
+/* Menú Carpetas: listado global */
+.folders-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 23px;
+  border-bottom: 1px solid var(--border);
+}
+.folders-search {
+  flex: 1 1 320px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-subtle);
+}
+.folders-search:focus-within {
+  border-color: var(--action);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+.folders-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0 !important;
+  outline: none;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+.folders-filters {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.folders-filters select {
+  min-height: 38px;
+}
+.folders-filters .secondary {
+  margin-left: auto;
+}
+.folders-denomination {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.folders-abbr {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border: 1px solid var(--accent-border);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+@media (max-width: 600px) {
+  .folders-toolbar {
+    padding: 14px;
+  }
+  .folders-filters select {
+    flex: 1 1 100%;
+  }
+  .folders-filters .secondary {
+    margin-left: 0;
+  }
+}

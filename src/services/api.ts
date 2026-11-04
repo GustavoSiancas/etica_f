@@ -106,7 +106,7 @@ export interface ExpedienteFolder {
   folder_type_id: number
   name: string
   // Siglas heredadas del tipo de carpeta.
-  abbreviation?: string
+  abbreviation?: string | null
   // Cada carpeta tiene su propio estado (ABIERTO/CERRADO) y ubicación.
   status?: string
   location?: string
@@ -114,6 +114,28 @@ export interface ExpedienteFolder {
   opening_date?: string | null
   created_at?: string
   updated_at?: string
+}
+// Carpeta en el listado global (GET /folders): incluye el número del expediente
+// y su denominación ("00004-2026 EP").
+export interface GlobalFolder extends ExpedienteFolder {
+  expediente_number?: string
+  denomination?: string
+}
+export interface FoldersPage {
+  data: GlobalFolder[]
+  total: number
+  limit: number
+  offset: number
+}
+export interface FolderFilters {
+  status?: string
+  location?: string
+  folder_type_id?: number | null
+  expediente_id?: number | null
+  // Busca por denominación o nombre.
+  q?: string
+  from?: string
+  to?: string
 }
 export interface ExpedienteSection {
   id: number
@@ -572,6 +594,30 @@ export const foldersService = {
         throw new ApiError('Ya existe un tipo de carpeta con ese nombre o esas siglas.', 409)
       throw error
     }
+  },
+  // Listado global paginado con filtros.
+  async page(limit = 20, offset = 0, filters: FolderFilters = {}): Promise<FoldersPage> {
+    const from = filters.from?.trim(),
+      to = filters.to?.trim()
+    for (const date of [from, to])
+      if (date && !isoDate.test(date)) throw new Error('Las fechas deben tener formato YYYY-MM-DD.')
+    if (from && to && from > to) throw new Error('La fecha "desde" no puede ser posterior a la fecha "hasta".')
+    const q = filters.q?.trim() || ''
+    if (q.length > 255) throw new Error('La búsqueda admite hasta 255 caracteres.')
+    const query = new URLSearchParams()
+    if (filters.status) query.set('status', filters.status)
+    if (filters.location) query.set('location', filters.location)
+    if (filters.folder_type_id) query.set('folder_type_id', String(positiveId(filters.folder_type_id, 'El tipo de carpeta')))
+    if (filters.expediente_id) query.set('expediente_id', String(positiveId(filters.expediente_id, 'El expediente')))
+    if (q) query.set('q', q)
+    if (from) query.set('from', from)
+    if (to) query.set('to', to)
+    const result = await request<Partial<FoldersPage>>(
+      `/folders?${query.toString() ? query + '&' : ''}${pagination(limit, offset)}`,
+    )
+    if (!result || !Array.isArray(result.data) || typeof result.total !== 'number')
+      throw new Error('El formato del listado de carpetas no es válido.')
+    return { data: result.data, total: result.total, limit: result.limit ?? limit, offset: result.offset ?? offset }
   },
   async statuses() {
     return toOptions(list<unknown>(await request('/folder-statuses'), 'statuses'), statusLabels, caseStatuses)

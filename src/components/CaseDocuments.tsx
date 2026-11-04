@@ -192,6 +192,26 @@ function fileLabel(url?: string | null) {
   const extension = url.split('?')[0].split('.').pop()?.toUpperCase() || ''
   return extension.length <= 4 ? extension : 'ARCHIVO'
 }
+// Tipo de archivo para darle color al ícono.
+function fileKind(url?: string | null) {
+  if (!url) return 'none'
+  const extension = fileLabel(url).toLowerCase()
+  if (extension === 'pdf') return 'pdf'
+  if (extension === 'doc' || extension === 'docx') return 'doc'
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension)) return 'img'
+  return 'other'
+}
+// "EXPEDIENTE PRINCIPAL" → "Expediente Principal"
+const minorWords = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'o', 'en'])
+function folderName(name: string) {
+  return name
+    .toLowerCase()
+    .split(/\s+/)
+    .map((word, index) =>
+      index > 0 && minorWords.has(word) ? word : word.charAt(0).toUpperCase() + word.slice(1),
+    )
+    .join(' ')
+}
 
 function Modal({
   eyebrow,
@@ -971,7 +991,21 @@ export default function CaseDocuments({
           <h3>Documentos</h3>
         </div>
       </div>
-      <div className="folder-bar">
+      {locked && (
+        <p className="tree-locked-banner" role="note">
+          <Icon name="lock" /> Expediente cerrado · solo lectura. Reábrelo para agregar o modificar carpetas,
+          secciones y documentos.
+        </p>
+      )}
+      {error && (
+        <p className="api-error tree-notice" role="alert">
+          {error}{' '}
+          <button type="button" className="row-link" onClick={() => setRefresh(value => value + 1)}>
+            Reintentar
+          </button>
+        </p>
+      )}
+      <div className="folder-cabinet">
         <div className="folder-tabs" role="tablist" aria-label="Carpetas del expediente">
           {folders.map(item => (
             <button
@@ -984,7 +1018,13 @@ export default function CaseDocuments({
               className={`folder-tab${item.id === selected ? ' is-active' : ''}`}
               onClick={() => select(item.id)}
             >
-              <Icon name="folder" /> {item.name}
+              <span className="folder-tab-icon">
+                <Icon name="folder" />
+              </span>
+              <span className="folder-tab-text">
+                <strong>{folderName(item.name)}</strong>
+                {item.opening_date && <small>{formatDate(peruDate(item.opening_date))}</small>}
+              </span>
             </button>
           ))}
           {loading && !folders.length && (
@@ -1016,22 +1056,13 @@ export default function CaseDocuments({
           </LockedTip>
         </div>
       </div>
-      {locked && (
-        <p className="tree-locked-banner" role="note">
-          <Icon name="lock" /> Expediente cerrado · solo lectura. Reábrelo para agregar o modificar carpetas,
-          secciones y documentos.
-        </p>
-      )}
-      {error && (
-        <p className="api-error tree-notice" role="alert">
-          {error}{' '}
-          <button type="button" className="row-link" onClick={() => setRefresh(value => value + 1)}>
-            Reintentar
-          </button>
-        </p>
-      )}
       {folder ? (
-        <div id="folder-panel" role="tabpanel" aria-labelledby={`folder-tab-${folder.id}`}>
+        <div
+          id="folder-panel"
+          className={`folder-sheet${folder.id === folders[0]?.id ? ' is-first' : ''}`}
+          role="tabpanel"
+          aria-labelledby={`folder-tab-${folder.id}`}
+        >
           <FolderTree key={folder.id} expedienteId={expedienteId} folder={folder} locked={locked} />
         </div>
       ) : (
@@ -1539,7 +1570,7 @@ function FolderTree({
               <ul className="tree-documents">
                 {state.items.map(document => (
                   <li key={document.id}>
-                    <span className="tree-file-badge">
+                    <span className="tree-file-badge" data-kind={fileKind(document.file_url)}>
                       <Icon name="file" />
                     </span>
                     <div className="tree-document-name">
@@ -1552,7 +1583,9 @@ function FolderTree({
                       )}
                       <small>
                         {document.file_url ? (
-                          <span className="tree-file-tag">{fileLabel(document.file_url)}</span>
+                          <span className="tree-file-tag" data-kind={fileKind(document.file_url)}>
+                            {fileLabel(document.file_url)}
+                          </span>
                         ) : (
                           <span className="tree-file-tag is-missing">Sin archivo</span>
                         )}
@@ -1623,16 +1656,25 @@ function FolderTree({
   const activeSection = documentDialog?.mode === 'create' ? documentDialog.section : null
   return (
     <>
-      <div className="folder-toolbar">
-        <p>
-          {folder.opening_date && (
-            <>
-              <Icon name="calendar" size={13} /> Apertura: {formatDate(peruDate(folder.opening_date))}
-              {!loading && ' · '}
-            </>
-          )}
-          {!loading && `${sections.length} ${sections.length === 1 ? 'sección' : 'secciones'}`}
-        </p>
+      <div className="folder-head">
+        <span className="folder-head-icon" aria-hidden="true">
+          <Icon name="folder" size={22} />
+        </span>
+        <div className="folder-head-text">
+          <h4>{folderName(folder.name)}</h4>
+          <p>
+            {folder.opening_date && (
+              <span>
+                <Icon name="calendar" size={13} /> Apertura: {formatDate(peruDate(folder.opening_date))}
+              </span>
+            )}
+            {!loading && (
+              <span>
+                {sections.length} {sections.length === 1 ? 'sección' : 'secciones'}
+              </span>
+            )}
+          </p>
+        </div>
         <div className="documents-actions">
           {sections.length > 0 && (
             <button
@@ -1707,7 +1749,7 @@ function FolderTree({
 
       {sectionDialog && (
         <Modal
-          eyebrow={folder.name}
+          eyebrow={folderName(folder.name)}
           title={
             sectionDialog.mode === 'edit'
               ? 'Editar sección'

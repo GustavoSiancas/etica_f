@@ -761,51 +761,91 @@
   overflow: visible !important;
 }
 
-/* Carpetas del expediente: pestañas sobre el árbol de secciones */
-.folder-bar {
+/* Carpetas del expediente: archivador con pestañas tipo carpeta física */
+.folder-cabinet {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
-  flex-wrap: wrap;
-  margin: 14px 20px 0;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border);
+  margin: 18px 20px 0;
 }
 .folder-tabs {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  align-items: flex-end;
+  gap: 4px;
   min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 .folder-tab {
+  position: relative;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 36px;
-  padding: 6px 12px;
-  border-radius: 9px;
+  gap: 10px;
+  min-height: 50px;
+  padding: 8px 18px 8px 12px;
+  margin-top: 6px;
   border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
   background: var(--surface);
   color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  text-align: left;
+  transition:
+    background 0.15s var(--ease),
+    color 0.15s var(--ease);
 }
 .folder-tab:hover {
-  border-color: var(--border-strong);
+  background: var(--surface-alt);
   color: var(--text);
 }
 .folder-tab.is-active {
-  border-color: var(--action);
+  z-index: 1;
+  margin-top: 0;
+  min-height: 56px;
+  margin-bottom: -1px;
+  padding-bottom: 9px;
+  background: var(--surface-alt);
+  color: var(--text);
+  box-shadow: inset 0 3px 0 var(--action);
+}
+.folder-tab-icon {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--surface-sunken, var(--surface-alt));
+  color: var(--text-subtle);
+}
+.folder-tab.is-active .folder-tab-icon {
   background: var(--accent-soft);
   color: var(--accent-text);
-  box-shadow: 0 0 0 1px var(--action) inset;
+}
+.folder-tab-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.folder-tab-text strong {
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.folder-tab-text small {
+  font-size: 11.5px;
+  color: var(--text-subtle);
+  white-space: nowrap;
 }
 .folder-bar-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding-bottom: 10px;
+  flex-shrink: 0;
 }
 .folder-bar-actions .secondary {
   margin: 0;
@@ -815,37 +855,144 @@
   align-items: center;
   gap: 7px;
 }
-.folder-toolbar {
+
+/* Hoja de la carpeta abierta: continúa la pestaña activa */
+.folder-sheet {
+  margin: 0 20px 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-alt);
+  overflow: hidden;
+}
+.folder-sheet.is-first {
+  border-top-left-radius: 0;
+}
+.folder-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
   flex-wrap: wrap;
-  margin: 14px 20px 0;
+  padding: 16px 18px;
+  border-bottom: 1px dashed var(--border-strong);
 }
-.folder-toolbar > p {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 0;
-  font-size: 13.5px;
-  color: var(--text-muted);
+.folder-head-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border: 1px solid var(--accent-border);
 }
-.folder-toolbar > p strong {
+.folder-head-text {
+  flex: 1;
+  min-width: 180px;
+}
+.folder-head-text h4 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   color: var(--text);
 }
-.folder-toolbar .documents-actions {
+.folder-head-text p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.folder-head-text p > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.folder-head-text p > span + span::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  margin-right: 9px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+.folder-head .documents-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
-.folder-toolbar .documents-actions .primary,
-.folder-toolbar .documents-actions .secondary {
+.folder-head .documents-actions .primary,
+.folder-head .documents-actions .secondary {
   margin: 0;
 }
+.folder-sheet .tree-root {
+  padding: 16px 18px 18px;
+}
+.folder-sheet .tree-notice {
+  margin: 14px 18px 0 !important;
+}
+.folder-sheet .documents-empty {
+  min-height: 260px;
+}
+
+/* Color del ícono según el tipo de archivo */
+.tree-file-badge[data-kind] {
+  --kind: var(--text-muted);
+  background: color-mix(in srgb, var(--kind) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--kind) 30%, var(--border));
+  color: var(--kind);
+}
+[data-kind='pdf'] {
+  --kind: #dc2626;
+}
+[data-kind='doc'] {
+  --kind: #2563eb;
+}
+[data-kind='img'] {
+  --kind: #0e9f6e;
+}
+[data-kind='other'] {
+  --kind: #7c3aed;
+}
+.tree-file-badge[data-kind='none'] {
+  background: var(--surface-alt);
+  border-style: dashed;
+  color: var(--text-subtle);
+}
+.tree-file-tag[data-kind] {
+  background: color-mix(in srgb, var(--kind) 12%, var(--surface));
+  color: color-mix(in srgb, var(--kind) 85%, var(--text));
+}
+.tree-document-name > small {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+.tree-document-name > small > span:not(.tree-file-tag) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 @media (max-width: 640px) {
-  .folder-bar,
-  .folder-toolbar {
+  .folder-cabinet {
+    flex-direction: column-reverse;
+    align-items: stretch;
     margin: 12px 12px 0;
+  }
+  .folder-bar-actions {
+    justify-content: flex-end;
+  }
+  .folder-sheet {
+    margin: 0 12px 12px;
+  }
+  .folder-head .documents-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
 }

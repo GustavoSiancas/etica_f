@@ -1700,6 +1700,65 @@ function FolderTree({
         <p className="folder-head-meta">
           {!loading && `${sections.length} ${sections.length === 1 ? 'sección' : 'secciones'}`}
         </p>
+        <div className={`folder-state${locked ? ' is-locked' : ''}`}>
+          <div className="folder-state-item">
+            <span className="folder-state-label">Estado</span>
+            <div
+              className="state-switch"
+              data-value={folder.status}
+              role="radiogroup"
+              aria-label="Estado de la carpeta"
+            >
+              <span className="state-switch-thumb" aria-hidden="true" />
+              {caseStatuses.map(option => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={folder.status === option.value}
+                  disabled={savingState !== null}
+                  onClick={() => void changeState('status', option.value)}
+                >
+                  <span className="state-dot" aria-hidden="true" />
+                  {savingState === 'status:' + option.value ? 'Guardando…' : option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="folder-state-item is-wide">
+            <span className="folder-state-label">Ubicación</span>
+            <ol
+              className="location-track"
+              aria-label="Ubicación de la carpeta"
+              style={
+                {
+                  '--steps': track.length,
+                  '--track-progress': currentStep < 0 ? 0 : currentStep / Math.max(1, track.length - 1),
+                } as CSSProperties
+              }
+            >
+              {track.map((option, index) => (
+                <li
+                  key={option.value}
+                  className={index < currentStep ? 'is-done' : index === currentStep ? 'is-current' : ''}
+                >
+                  <button
+                    type="button"
+                    disabled={savingState !== null}
+                    aria-current={index === currentStep ? 'step' : undefined}
+                    title={`Mover la carpeta a ${option.label}`}
+                    onClick={() => void changeState('location', option.value)}
+                  >
+                    <span className="track-dot" aria-hidden="true">
+                      {savingState === 'location:' + option.value ? <span className="track-spinner" /> : index + 1}
+                    </span>
+                    <span className="track-label">{option.label}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
         <div className="documents-actions">
           {sections.length > 0 && (
             <button
@@ -1720,65 +1779,6 @@ function FolderTree({
               <Icon name="plus" /> Nueva sección
             </button>
           </LockedTip>
-        </div>
-      </div>
-      <div className={`folder-state${locked ? ' is-locked' : ''}`}>
-        <div className="folder-state-item">
-          <span className="folder-state-label">Estado</span>
-          <div
-            className="state-switch"
-            data-value={folder.status}
-            role="radiogroup"
-            aria-label="Estado de la carpeta"
-          >
-            <span className="state-switch-thumb" aria-hidden="true" />
-            {caseStatuses.map(option => (
-              <button
-                key={option.value}
-                type="button"
-                role="radio"
-                aria-checked={folder.status === option.value}
-                disabled={savingState !== null}
-                onClick={() => void changeState('status', option.value)}
-              >
-                <span className="state-dot" aria-hidden="true" />
-                {savingState === 'status:' + option.value ? 'Guardando…' : option.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="folder-state-item is-wide">
-          <span className="folder-state-label">Ubicación</span>
-          <ol
-            className="location-track"
-            aria-label="Ubicación de la carpeta"
-            style={
-              {
-                '--steps': track.length,
-                '--track-progress': currentStep < 0 ? 0 : currentStep / Math.max(1, track.length - 1),
-              } as CSSProperties
-            }
-          >
-            {track.map((option, index) => (
-              <li
-                key={option.value}
-                className={index < currentStep ? 'is-done' : index === currentStep ? 'is-current' : ''}
-              >
-                <button
-                  type="button"
-                  disabled={savingState !== null}
-                  aria-current={index === currentStep ? 'step' : undefined}
-                  title={`Mover la carpeta a ${option.label}`}
-                  onClick={() => void changeState('location', option.value)}
-                >
-                  <span className="track-dot" aria-hidden="true">
-                    {savingState === 'location:' + option.value ? <span className="track-spinner" /> : index + 1}
-                  </span>
-                  <span className="track-label">{option.label}</span>
-                </button>
-              </li>
-            ))}
-          </ol>
         </div>
       </div>
       {stateError && (

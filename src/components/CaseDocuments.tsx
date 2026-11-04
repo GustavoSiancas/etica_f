@@ -32,6 +32,13 @@ const defaultTypes = ['Escrito de oficio', 'Resolución', 'OTROS']
 const lockedMessage = 'La carpeta está cerrada: reábrela para agregar o modificar secciones y documentos.'
 
 type DocsState = { items: DocumentRecord[]; loading: boolean; error: string }
+// Lo último visto de cada carpeta: al volver a ella se muestra al instante y se actualiza por detrás.
+type FolderSnapshot = {
+  sections: ExpedienteSection[]
+  expanded: Set<number>
+  docs: Record<number, DocsState>
+}
+const folderCache = new Map<string, FolderSnapshot>()
 type SectionDialog =
   | { mode: 'create'; parent: ExpedienteSection | null }
   | { mode: 'edit'; section: ExpedienteSection }
@@ -1068,7 +1075,6 @@ export default function CaseDocuments({
       </div>
       {folder ? (
         <div
-          key={folder.id}
           id="folder-panel"
           className={`folder-sheet${folder.id === folders[0]?.id ? ' is-first' : ''}`}
           role="tabpanel"
@@ -1154,12 +1160,27 @@ function FolderTree({
       setSavingState(null)
     }
   }
-  const [sections, setSections] = useState<ExpedienteSection[]>([])
-  const [loading, setLoading] = useState(true)
+  const cacheKey = `${expedienteId}:${folder.id}`
+  const [cached] = useState(() => folderCache.get(cacheKey))
+  const [sections, setSections] = useState<ExpedienteSection[]>(cached?.sections ?? [])
+  const [loading, setLoading] = useState(!cached)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
-  const [expanded, setExpanded] = useState<Set<number>>(new Set())
-  const [docs, setDocs] = useState<Record<number, DocsState>>({})
+  const [expanded, setExpanded] = useState<Set<number>>(cached?.expanded ?? new Set())
+  const [docs, setDocs] = useState<Record<number, DocsState>>(cached?.docs ?? {})
+  useEffect(() => {
+    folderCache.set(cacheKey, { sections, expanded, docs })
+  }, [cacheKey, sections, expanded, docs])
+  // Las barras de carga solo aparecen si la primera carga tarda; si es rápida no hay parpadeo.
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    if (!loading) {
+      setSlow(false)
+      return
+    }
+    const timer = setTimeout(() => setSlow(true), 250)
+    return () => clearTimeout(timer)
+  }, [loading])
   const [sectionDialog, setSectionDialog] = useState<SectionDialog | null>(null)
   const [documentDialog, setDocumentDialog] = useState<DocumentDialog | null>(null)
   const [confirm, setConfirm] = useState<Confirm | null>(null)
@@ -1167,7 +1188,7 @@ function FolderTree({
   const [confirmError, setConfirmError] = useState('')
   const [notice, setNotice] = useState('')
   const [moving, setMoving] = useState<number | null>(null)
-  const firstLoad = useRef(true)
+  const firstLoad = useRef(!cached)
   // Si la carpeta se cierra con un diálogo abierto, se cierra el diálogo.
   useEffect(() => {
     if (locked) {
@@ -1808,11 +1829,15 @@ function FolderTree({
         </p>
       )}
       {loading && !sections.length ? (
-        <div className="tree-skeleton" role="status" aria-label="Cargando secciones">
-          <span />
-          <span />
-          <span />
-        </div>
+        slow ? (
+          <div className="tree-skeleton" role="status" aria-label="Cargando secciones">
+            <span />
+            <span />
+            <span />
+          </div>
+        ) : (
+          <div className="tree-placeholder" aria-hidden="true" />
+        )
       ) : tree.length ? (
         <ul className="tree-root">
           {tree.map((section, index) => renderSection(section, 0, index, tree.length))}

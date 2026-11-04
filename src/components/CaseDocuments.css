@@ -1091,11 +1091,10 @@
 
 
 
-/* Transiciones suaves al cambiar de carpeta, estado o contenido */
-@keyframes folderSheetIn {
+/* Movimiento mínimo: solo desvanecidos cortos, sin desplazamientos ni animaciones continuas */
+@keyframes folderFade {
   from {
     opacity: 0;
-    transform: translateY(4px);
   }
 }
 @keyframes folderShimmer {
@@ -1103,8 +1102,12 @@
     background-position: -200% 0;
   }
 }
-.folder-sheet > * {
-  animation: folderSheetIn 0.22s var(--ease) both;
+.folder-sheet .tree-root,
+.folder-sheet > .documents-empty,
+.tree-body,
+.tree-locked-banner,
+.folder-sheet .tree-notice {
+  animation: folderFade 0.16s ease-out both;
 }
 .folder-tab-icon,
 .folder-tab-status {
@@ -1112,15 +1115,14 @@
     background-color 0.2s var(--ease),
     color 0.2s var(--ease);
 }
-.tree-body,
-.tree-locked-banner,
-.folder-sheet .tree-notice {
-  animation: folderSheetIn 0.18s var(--ease) both;
+.tree-placeholder {
+  min-height: 180px;
 }
 .tree-skeleton {
   display: grid;
   gap: 10px;
   padding: 16px 18px 18px;
+  animation: folderFade 0.2s ease-out both;
 }
 .tree-skeleton > span {
   height: 52px;
@@ -1133,7 +1135,7 @@
       var(--surface) 100%
     )
     0 0 / 200% 100%;
-  animation: folderShimmer 1.2s linear infinite;
+  animation: folderShimmer 1.4s linear infinite;
 }
 .tree-skeleton.is-docs {
   padding: 0;
@@ -1143,15 +1145,27 @@
   height: 44px;
   border-radius: 9px;
 }
+/* Sin latido permanente en el estado de la carpeta */
+.folder-state .state-switch button[aria-checked='true'] .state-dot {
+  animation: none;
+}
 .folder-state .state-switch-thumb {
-  transition: transform 0.25s var(--ease), background-color 0.25s var(--ease);
+  transition:
+    transform 0.25s var(--ease),
+    background-color 0.25s var(--ease);
 }
 @media (prefers-reduced-motion: reduce) {
-  .folder-sheet > *,
+  .folder-sheet .tree-root,
+  .folder-sheet > .documents-empty,
   .tree-body,
   .tree-locked-banner,
   .folder-sheet .tree-notice,
+  .tree-skeleton,
   .tree-skeleton > span {
     animation: none;
+  }
+  .folder-state .state-switch-thumb,
+  .folder-state .location-track::after {
+    transition: none;
   }
 }

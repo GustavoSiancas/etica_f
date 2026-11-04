@@ -193,7 +193,17 @@ body { font-size: 14px; }
   gap: 18px;
   padding: 22px;
 }
-.case-view.is-alt .case-summary dl > div { grid-template-columns: 92px 1fr; gap: 10px; }
+/* En la columna angosta, cada dato va con su etiqueta encima en vez de al lado */
+.case-view.is-alt .case-summary dl { gap: 14px; }
+.case-view.is-alt .case-summary dl > div { grid-template-columns: 1fr; gap: 3px; }
+.case-view.is-alt .case-summary dt {
+  font-size: 11px !important; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-subtle);
+}
+.case-view.is-alt .case-summary dd { font-size: 14.5px !important; line-height: 1.45; }
+.case-view.is-alt .case-description { flex-wrap: nowrap; }
+.case-view.is-alt .case-description .row-link { margin-top: -22px; }
+.case-view.is-alt .case-hero-top { justify-content: space-between; }
 .case-view.is-alt .case-number { font-size: 26px !important; margin-bottom: 14px !important; }
 .case-view.is-alt .case-controls {
   grid-template-columns: 1fr;
@@ -202,7 +212,10 @@ body { font-size: 14px; }
   min-width: 0;
   align-self: stretch;
 }
-.case-view.is-alt .control-card { min-height: 0; padding: 16px; gap: 12px; }
+.case-view.is-alt .case-controls { gap: 10px; }
+.case-view.is-alt .control-card { min-height: 0; padding: 14px; gap: 10px; }
+.case-view.is-alt .control-hint { font-size: 12px; }
+.case-view.is-alt .state-switch button { min-height: 36px; }
 .case-view.is-alt > .case-participants { align-self: start; }
 .case-view.is-alt > .documents-panel { align-self: stretch; }
 

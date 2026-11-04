@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
 import {
   caseStatuses,
   expedientesService,
@@ -21,7 +20,6 @@ import CaseRow from './CaseRow'
 import { useAltCaseView } from '../caseView'
 import type { ActiveParticipant, CaseFile, CaseStatus, Person, Role, InitiationType } from '../services/api'
 import CaseDocuments from './CaseDocuments'
-import SuccessDialog from './SuccessDialog'
 
 const pageSize = 20
 const errorMessage = (error: unknown) =>
@@ -278,10 +276,8 @@ function CaseDetail({
     }
   }, [initialFile.id, participantRefresh])
 
-  const locations = useLocations()
   const [saving, setSaving] = useState<string | null>(null)
-  const [message, setMessage] = useState<{ title: string; text: string } | null>(null)
-  const [error, setError] = useState('')
+  // Estado y ubicación pasarán a cada carpeta; mientras tanto se respeta el cierre del expediente.
   const closed = file.status === 'CERRADO'
   const altView = useAltCaseView()
   const [descriptionDraft, setDescriptionDraft] = useState<string | null>(null)
@@ -308,56 +304,6 @@ function CaseDetail({
       setSaving(null)
     }
   }
-  async function changeStatus(next: string) {
-    if (saving || next === file.status) return
-    setSaving('status:' + next)
-    setError('')
-    setMessage(null)
-    try {
-      const updated = { ...file, ...(await expedientesService.updateStatus(file.id, next)) }
-      setFile(updated)
-      onChanged(updated)
-      setMessage(
-        next === 'CERRADO'
-          ? {
-              title: 'Expediente cerrado',
-              text: `El expediente ${formatCaseNumber(file.number)} quedó cerrado. No se podrán agregar secciones ni documentos hasta reabrirlo, pero sí cambiar su ubicación.`,
-            }
-          : {
-              title: 'Expediente reabierto',
-              text: `El expediente ${formatCaseNumber(file.number)} está abierto nuevamente.`,
-            },
-      )
-    } catch (caught) {
-      setError(errorMessage(caught))
-    } finally {
-      setSaving(null)
-    }
-  }
-  async function changeLocation(next: string) {
-    if (saving || next === file.location) return
-    setSaving('location:' + next)
-    setError('')
-    setMessage(null)
-    try {
-      const updated = { ...file, ...(await expedientesService.updateLocation(file.id, next)) }
-      setFile(updated)
-      onChanged(updated)
-      setMessage({
-        title: 'Ubicación actualizada',
-        text: `El expediente ${formatCaseNumber(file.number)} ahora está en ${locationLabel(next)}.`,
-      })
-    } catch (caught) {
-      setError(errorMessage(caught))
-    } finally {
-      setSaving(null)
-    }
-  }
-  const track =
-    file.location && !locations.some(option => option.value === file.location)
-      ? [...locations, { value: file.location, label: locationLabel(file.location) }]
-      : locations
-  const currentStep = track.findIndex(option => option.value === file.location)
   // La fecha de apertura puede llegar como YYYY-MM-DD o como instante UTC: se muestra el día en Perú.
   const openingDay = peruDate(file.opening_date)
   const formattedDate = openingDay
@@ -367,14 +313,6 @@ function CaseDetail({
     : 'No disponible'
   return (
     <>
-      {message && (
-        <SuccessDialog
-          title={message.title}
-          message={message.text}
-          actionLabel="Continuar"
-          onClose={() => setMessage(null)}
-        />
-      )}
       {/* Mismos bloques en ambas vistas; solo cambia su ubicación (CSS), así no se pierde lo abierto. */}
       <div className={`case-view${altView ? ' is-alt' : ''}`}>
         <section className="case-summary case-hero">
@@ -459,75 +397,6 @@ function CaseDetail({
                 <dd>{formattedDate}</dd>
               </div>
             </dl>
-          </div>
-          <div className="case-controls">
-            <div className="control-card">
-              <span className="control-label">Estado</span>
-              <div
-                className="state-switch"
-                data-value={file.status}
-                role="radiogroup"
-                aria-label="Estado del expediente"
-              >
-                <span className="state-switch-thumb" aria-hidden="true" />
-                {caseStatuses.map(option => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={file.status === option.value}
-                    disabled={saving !== null}
-                    onClick={() => void changeStatus(option.value)}
-                  >
-                    <span className="state-dot" aria-hidden="true" />
-                    {saving === 'status:' + option.value ? 'Guardando…' : option.label}
-                  </button>
-                ))}
-              </div>
-              <small className="control-hint">
-                {closed
-                  ? 'Cerrado: no se pueden agregar secciones ni documentos.'
-                  : 'En trámite. Se pueden agregar secciones y documentos.'}
-              </small>
-            </div>
-            <div className="control-card">
-              <span className="control-label">Ubicación</span>
-              <ol
-                className="location-track"
-                aria-label="Ubicación del expediente"
-                style={
-                  {
-                    '--steps': track.length,
-                    '--track-progress': currentStep < 0 ? 0 : currentStep / Math.max(1, track.length - 1),
-                  } as CSSProperties
-                }
-              >
-                {track.map((option, index) => (
-                  <li
-                    key={option.value}
-                    className={index < currentStep ? 'is-done' : index === currentStep ? 'is-current' : ''}
-                  >
-                    <button
-                      type="button"
-                      disabled={saving !== null}
-                      aria-current={index === currentStep ? 'step' : undefined}
-                      title={`Mover a ${option.label}`}
-                      onClick={() => void changeLocation(option.value)}
-                    >
-                      <span className="track-dot" aria-hidden="true">
-                        {saving === 'location:' + option.value ? <span className="track-spinner" /> : index + 1}
-                      </span>
-                      <span className="track-label">{option.label}</span>
-                    </button>
-                  </li>
-                ))}
-              </ol>
-            </div>
-            {error && (
-              <p className="api-error case-controls-feedback" role="alert">
-                {error}
-              </p>
-            )}
           </div>
         </section>
         <CaseDocuments

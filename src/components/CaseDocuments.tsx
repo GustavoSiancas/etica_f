@@ -1039,8 +1039,8 @@ export default function CaseDocuments({
             className="secondary tree-refresh"
             disabled={loading}
             onClick={() => setRefresh(value => value + 1)}
-            aria-label="Actualizar carpetas"
-            title="Actualizar carpetas"
+            aria-label="Actualizar carpetas y secciones"
+            title="Actualizar"
           >
             <Icon name="refresh" />
           </button>
@@ -1063,7 +1063,13 @@ export default function CaseDocuments({
           role="tabpanel"
           aria-labelledby={`folder-tab-${folder.id}`}
         >
-          <FolderTree key={folder.id} expedienteId={expedienteId} folder={folder} locked={locked} />
+          <FolderTree
+            key={folder.id}
+            expedienteId={expedienteId}
+            folder={folder}
+            locked={locked}
+            reload={refresh}
+          />
         </div>
       ) : (
         !loading &&
@@ -1105,10 +1111,13 @@ function FolderTree({
   expedienteId,
   folder,
   locked,
+  reload,
 }: {
   expedienteId: number
   folder: ExpedienteFolder
   locked: boolean
+  // Cambia cuando se pulsa "Actualizar" en la barra de carpetas.
+  reload: number
 }) {
   const [sections, setSections] = useState<ExpedienteSection[]>([])
   const [loading, setLoading] = useState(true)
@@ -1203,7 +1212,7 @@ function FolderTree({
     return () => {
       current = false
     }
-  }, [expedienteId, folder.id, refresh, loadDocs])
+  }, [expedienteId, folder.id, refresh, reload, loadDocs])
 
   const tree = useMemo(() => buildSectionTree(sections), [sections])
   const nodes = useMemo(() => {
@@ -1657,24 +1666,9 @@ function FolderTree({
   return (
     <>
       <div className="folder-head">
-        <span className="folder-head-icon" aria-hidden="true">
-          <Icon name="folder" size={22} />
-        </span>
-        <div className="folder-head-text">
-          <h4>{folderName(folder.name)}</h4>
-          <p>
-            {folder.opening_date && (
-              <span>
-                <Icon name="calendar" size={13} /> Apertura: {formatDate(peruDate(folder.opening_date))}
-              </span>
-            )}
-            {!loading && (
-              <span>
-                {sections.length} {sections.length === 1 ? 'sección' : 'secciones'}
-              </span>
-            )}
-          </p>
-        </div>
+        <p className="folder-head-meta">
+          {!loading && `${sections.length} ${sections.length === 1 ? 'sección' : 'secciones'}`}
+        </p>
         <div className="documents-actions">
           {sections.length > 0 && (
             <button
@@ -1685,16 +1679,6 @@ function FolderTree({
               {expanded.size < sections.length ? 'Expandir todo' : 'Contraer todo'}
             </button>
           )}
-          <button
-            type="button"
-            className="secondary tree-refresh"
-            disabled={loading}
-            onClick={() => setRefresh(value => value + 1)}
-            aria-label="Actualizar secciones"
-            title="Actualizar secciones"
-          >
-            <Icon name="refresh" />
-          </button>
           <LockedTip locked={locked}>
             <button
               type="button"

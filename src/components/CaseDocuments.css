@@ -773,9 +773,8 @@
   display: flex;
   align-items: flex-end;
   gap: 4px;
+  flex-wrap: wrap;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: thin;
 }
 .folder-tab {
   position: relative;
@@ -870,53 +869,17 @@
 .folder-head {
   display: flex;
   align-items: center;
-  gap: 14px;
+  justify-content: space-between;
+  gap: 12px;
   flex-wrap: wrap;
-  padding: 16px 18px;
+  padding: 12px 18px;
   border-bottom: 1px dashed var(--border-strong);
 }
-.folder-head-icon {
-  flex-shrink: 0;
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  border: 1px solid var(--accent-border);
-}
-.folder-head-text {
-  flex: 1;
-  min-width: 180px;
-}
-.folder-head-text h4 {
-  margin: 0 0 4px;
-  font-size: 16px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  color: var(--text);
-}
-.folder-head-text p {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
+.folder-head-meta {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-muted);
-}
-.folder-head-text p > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.folder-head-text p > span + span::before {
-  content: '';
-  width: 4px;
-  height: 4px;
-  margin-right: 9px;
-  border-radius: 50%;
-  background: var(--border-strong);
 }
 .folder-head .documents-actions {
   display: flex;

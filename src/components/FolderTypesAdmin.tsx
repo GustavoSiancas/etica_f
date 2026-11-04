@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { folderName, foldersService } from '../services/api'
+import { folderName, foldersService, suggestAbbreviation } from '../services/api'
 import type { FolderType } from '../services/api'
 import './FolderTypesAdmin.css'
 
@@ -31,6 +31,9 @@ export default function FolderTypesAdmin() {
   const [loadError, setLoadError] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [name, setName] = useState('')
+  const [abbreviation, setAbbreviation] = useState('')
+  // Mientras no se editen a mano, las siglas se sugieren desde el nombre.
+  const [abbrTouched, setAbbrTouched] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [created, setCreated] = useState<FolderType | null>(null)
@@ -65,10 +68,12 @@ export default function FolderTypesAdmin() {
     setSaving(true)
     setError('')
     try {
-      const type = await foldersService.createType(name)
+      const type = await foldersService.createType(name, abbreviation)
       setTypes(rows => [...(rows || []).filter(row => row.id !== type.id), type])
       setCreated(type)
       setName('')
+      setAbbreviation('')
+      setAbbrTouched(false)
     } catch (caught) {
       setError(errorMessage(caught))
     } finally {
@@ -100,9 +105,31 @@ export default function FolderTypesAdmin() {
             value={name}
             disabled={saving}
             placeholder="Ej. Expediente especial"
-            onChange={event => setName(event.target.value)}
+            onChange={event => {
+              setName(event.target.value)
+              if (!abbrTouched) setAbbreviation(suggestAbbreviation(event.target.value))
+            }}
           />
-          <small>Se guarda en mayúsculas. No se permiten nombres repetidos.</small>
+          <label htmlFor="folder-type-abbr">
+            Siglas <b>*</b>
+          </label>
+          <input
+            id="folder-type-abbr"
+            className="folder-types-abbr-input"
+            required
+            maxLength={10}
+            value={abbreviation}
+            disabled={saving}
+            placeholder="Ej. EE"
+            onChange={event => {
+              setAbbrTouched(true)
+              setAbbreviation(event.target.value.toUpperCase().replace(/[^A-Z0-9Ñ]/g, ''))
+            }}
+          />
+          <small>
+            Se guardan en mayúsculas. Las siglas se sugieren desde el nombre y puedes cambiarlas. No se permiten
+            nombres ni siglas repetidos.
+          </small>
           {error && (
             <p className="api-error" role="alert">
               {error}
@@ -113,7 +140,7 @@ export default function FolderTypesAdmin() {
               Tipo “{folderName(created.name)}” creado.
             </p>
           )}
-          <button className="primary" disabled={saving || !name.trim()}>
+          <button className="primary" disabled={saving || !name.trim() || !abbreviation.trim()}>
             {saving ? 'Añadiendo…' : '+ Añadir tipo'}
           </button>
         </form>
@@ -139,8 +166,8 @@ export default function FolderTypesAdmin() {
             <ul className="folder-types-list">
               {sorted.map(type => (
                 <li key={type.id} className={created?.id === type.id ? 'is-new' : ''}>
-                  <span className="folder-types-icon">
-                    <FolderIcon />
+                  <span className={`folder-types-icon${type.abbreviation ? ' has-abbr' : ''}`}>
+                    {type.abbreviation || <FolderIcon />}
                   </span>
                   <strong>{folderName(type.name)}</strong>
                   <small>ID {type.id}</small>

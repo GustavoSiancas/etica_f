@@ -204,3 +204,14 @@
     grid-template-columns: 1fr;
   }
 }
+
+.folder-types-form label + input + label { margin-top: 6px; }
+.folder-types-abbr-input { max-width: 160px; font-weight: 700; letter-spacing: .08em; }
+.folder-types-icon.has-abbr {
+  width: auto;
+  min-width: 34px;
+  padding: 0 7px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}

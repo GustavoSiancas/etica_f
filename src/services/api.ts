@@ -80,12 +80,16 @@ export const formatCaseNumber = (value?: string) => {
 export interface FolderType {
   id: number
   name: string
+  // Siglas del tipo (p. ej. EP, MC).
+  abbreviation?: string
 }
 export interface ExpedienteFolder {
   id: number
   expediente_id: number
   folder_type_id: number
   name: string
+  // Siglas heredadas del tipo de carpeta.
+  abbreviation?: string
   // Instante en UTC (p. ej. 2026-11-04T05:00:00Z = medianoche en Perú).
   opening_date?: string | null
   created_at?: string
@@ -538,6 +542,19 @@ export function folderName(name: string) {
     .join(' ')
 }
 
+// Siglas sugeridas a partir del nombre: "Expediente especial" → "EE".
+export function suggestAbbreviation(name: string) {
+  return name
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(word => word && !minorWords.has(word))
+    .map(word => word.charAt(0).toUpperCase())
+    .join('')
+    .replace(/[^A-Z0-9Ñ]/g, '')
+    .slice(0, 10)
+}
+
 // ---------- Carpetas del expediente ----------
 export const foldersService = {
   // Catálogo de nombres disponibles; los IDs se usan tal como llegan del backend.
@@ -545,15 +562,18 @@ export const foldersService = {
     return list<FolderType>(await request('/folder-types'), 'folder_types')
   },
   // El backend guarda el nombre en mayúsculas. Duplicado → 409.
-  async createType(name: string) {
+  async createType(name: string, abbreviation: string) {
     const value = name.trim()
     if (!value || value.length > 255)
       throw new Error('El nombre del tipo es obligatorio y admite hasta 255 caracteres.')
+    const siglas = abbreviation.trim().toUpperCase()
+    if (!/^[A-Z0-9Ñ]{1,10}$/.test(siglas))
+      throw new Error('Las siglas son obligatorias: hasta 10 letras o números, sin espacios.')
     try {
-      return await request<FolderType>('/folder-types', { name: value })
+      return await request<FolderType>('/folder-types', { name: value, abbreviation: siglas })
     } catch (error) {
       if (error instanceof ApiError && error.status === 409)
-        throw new ApiError('Ya existe un tipo de carpeta con ese nombre.', 409)
+        throw new ApiError('Ya existe un tipo de carpeta con ese nombre o esas siglas.', 409)
       throw error
     }
   },

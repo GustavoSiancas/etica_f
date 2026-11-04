@@ -873,8 +873,8 @@ function FolderForm({
                 className={chosen === type.id ? 'is-selected' : ''}
                 onClick={() => setChosen(type.id)}
               >
-                <span className="tree-file-badge">
-                  <Icon name="folder" />
+                <span className={`tree-file-badge${type.abbreviation ? ' folder-abbr' : ''}`}>
+                  {type.abbreviation || <Icon name="folder" />}
                 </span>
                 <span>
                   <strong>{folderName(type.name)}</strong>
@@ -1025,8 +1025,8 @@ export default function CaseDocuments({
               className={`folder-tab${item.id === selected ? ' is-active' : ''}`}
               onClick={() => select(item.id)}
             >
-              <span className="folder-tab-icon">
-                <Icon name="folder" />
+              <span className={`folder-tab-icon${item.abbreviation ? ' has-abbr' : ''}`}>
+                {item.abbreviation || <Icon name="folder" />}
               </span>
               <span className="folder-tab-text">
                 <strong>{folderName(item.name)}</strong>

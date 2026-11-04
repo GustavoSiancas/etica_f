@@ -118,37 +118,31 @@ export default function FoldersList() {
 
       <section className="dashboard-table case-list">
         <div className="folders-toolbar">
-          <div className="folders-search">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-4-4" />
-            </svg>
-            <input
-              type="search"
-              value={search}
-              maxLength={255}
-              onChange={event => setSearch(event.target.value)}
-              placeholder="Buscar por denominación o nombre (ej. 00004-2026 o MC)"
-              aria-label="Buscar carpetas"
-            />
-          </div>
-          <div className="status-filter" role="group" aria-label="Filtrar por estado">
-            {([['', 'Todos'], ...caseStatuses.map(option => [option.value, option.label])] as [string, string][]).map(
-              ([value, label]) => (
-                <button
-                  key={value || 'all'}
-                  type="button"
-                  className={`status-filter-button${filters.status === value ? ' active' : ''}`}
-                  aria-pressed={filters.status === value}
-                  onClick={() => update({ status: value })}
-                >
-                  {label}
-                </button>
-              ),
-            )}
-          </div>
-          <div className="folders-filters">
+          <div className="folders-toolbar-row">
+            <div className="folders-search">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                aria-hidden="true"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-4-4" />
+              </svg>
+              <input
+                type="search"
+                value={search}
+                maxLength={255}
+                onChange={event => setSearch(event.target.value)}
+                placeholder="Buscar por denominación o nombre (ej. 00004-2026 o MC)"
+                aria-label="Buscar carpetas"
+              />
+            </div>
             <select
+              className="folders-type"
               aria-label="Tipo de carpeta"
               value={filters.folder_type_id}
               onChange={event => update({ folder_type_id: event.target.value })}
@@ -161,50 +155,86 @@ export default function FoldersList() {
                 </option>
               ))}
             </select>
-            <select
-              aria-label="Ubicación"
-              value={filters.location}
-              onChange={event => update({ location: event.target.value })}
+            <button
+              type="button"
+              className="secondary folders-refresh"
+              disabled={loading}
+              onClick={() => void load()}
+              aria-label="Actualizar"
+              title="Actualizar"
             >
-              <option value="">Todas las ubicaciones</option>
-              {locations.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <div
-              className={`profile-range${rangeInvalid ? ' is-invalid' : ''}`}
-              role="group"
-              aria-label="Fecha de apertura"
-            >
-              <label>
-                <span>Desde</span>
-                <input
-                  type="date"
-                  value={filters.from}
-                  max={filters.to || undefined}
-                  onChange={event => update({ from: event.target.value })}
-                />
-              </label>
-              <label>
-                <span>Hasta</span>
-                <input
-                  type="date"
-                  value={filters.to}
-                  min={filters.from || undefined}
-                  onChange={event => update({ to: event.target.value })}
-                />
-              </label>
+              ↻
+            </button>
+          </div>
+          <div className="folders-toolbar-row folders-facets">
+            <div className="folders-facet">
+              <span className="folders-facet-label">Estado</span>
+              <div className="folders-segmented" role="group" aria-label="Filtrar por estado">
+                {([['', 'Todos'], ...caseStatuses.map(option => [option.value, option.label])] as [string, string][]).map(
+                  ([value, label]) => (
+                    <button
+                      key={value || 'all'}
+                      type="button"
+                      className={filters.status === value ? 'is-active' : ''}
+                      aria-pressed={filters.status === value}
+                      data-status={value || undefined}
+                      onClick={() => update({ status: value })}
+                    >
+                      {value && <i aria-hidden="true" />}
+                      {label}
+                    </button>
+                  ),
+                )}
+              </div>
+            </div>
+            <div className="folders-facet">
+              <span className="folders-facet-label">Ubicación</span>
+              <div className="folders-segmented" role="group" aria-label="Filtrar por ubicación">
+                {[{ value: '', label: 'Todas' }, ...locations].map(option => (
+                  <button
+                    key={option.value || 'all'}
+                    type="button"
+                    className={filters.location === option.value ? 'is-active' : ''}
+                    aria-pressed={filters.location === option.value}
+                    onClick={() => update({ location: option.value })}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="folders-facet">
+              <span className="folders-facet-label">Apertura</span>
+              <div
+                className={`profile-range${rangeInvalid ? ' is-invalid' : ''}`}
+                role="group"
+                aria-label="Fecha de apertura"
+              >
+                <label>
+                  <span>Desde</span>
+                  <input
+                    type="date"
+                    value={filters.from}
+                    max={filters.to || undefined}
+                    onChange={event => update({ from: event.target.value })}
+                  />
+                </label>
+                <label>
+                  <span>Hasta</span>
+                  <input
+                    type="date"
+                    value={filters.to}
+                    min={filters.from || undefined}
+                    onChange={event => update({ to: event.target.value })}
+                  />
+                </label>
+              </div>
             </div>
             {filtered && (
-              <button type="button" className="row-link" onClick={clear}>
+              <button type="button" className="row-link folders-clear" onClick={clear}>
                 Limpiar filtros
               </button>
             )}
-            <button className="secondary" disabled={loading} onClick={() => void load()}>
-              Actualizar
-            </button>
           </div>
         </div>
 

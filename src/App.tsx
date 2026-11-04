@@ -2,14 +2,15 @@ import { useEffect, useState } from 'react'
 import Management from './components/Management'
 import FolderTypesAdmin from './components/FolderTypesAdmin'
 import FoldersList from './components/FoldersList'
-import CaseRow from './components/CaseRow'
 import {
   expedientesService,
+  folderName,
+  foldersService,
   formatCaseNumber,
-  initiationTypes,
+  locationLabel,
   statusLabel,
 } from './services/api'
-import type { CaseFile, InitiationType, Role } from './services/api'
+import type { GlobalFolder, Role } from './services/api'
 import { navigate, paths, useRoute } from './router'
 import { setAltCaseView, useAltCaseView } from './caseView'
 import type { Route } from './router'
@@ -83,11 +84,11 @@ function Dashboard({
   create,
 }: {
   navigate: (view: View) => void
-  open: (file: CaseFile) => void
+  open: (folder: GlobalFolder) => void
   create: () => void
 }) {
-  const [files, setFiles] = useState<CaseFile[]>([])
-  const [totals, setTotals] = useState({ all: 0, open: 0, closed: 0 })
+  const [folders, setFolders] = useState<GlobalFolder[]>([])
+  const [totals, setTotals] = useState({ cases: 0, open: 0, closed: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
@@ -95,16 +96,17 @@ function Dashboard({
     let cancelled = false
     setLoading(true)
     setError('')
-    // El total de cada consulta ya viene filtrado por el backend.
+    // El estado ahora es de cada carpeta: los contadores de abiertas/cerradas cuentan carpetas.
     Promise.all([
-      expedientesService.page(5, 0),
-      expedientesService.page(1, 0, { status: 'ABIERTO' }),
-      expedientesService.page(1, 0, { status: 'CERRADO' }),
+      expedientesService.page(1, 0),
+      foldersService.page(5, 0),
+      foldersService.page(1, 0, { status: 'ABIERTO' }),
+      foldersService.page(1, 0, { status: 'CERRADO' }),
     ])
-      .then(([recent, opened, closed]) => {
+      .then(([cases, recent, opened, closed]) => {
         if (!cancelled) {
-          setFiles(recent.data)
-          setTotals({ all: recent.total, open: opened.total, closed: closed.total })
+          setFolders(recent.data)
+          setTotals({ cases: cases.total, open: opened.total, closed: closed.total })
         }
       })
       .catch(error => {
@@ -135,14 +137,14 @@ function Dashboard({
             <Icon name="folder" />
           </span>
           <p>Total de expedientes</p>
-          <strong>{value(totals.all)}</strong>
+          <strong>{value(totals.cases)}</strong>
           <small>Registrados en el sistema</small>
         </article>
         <article className="summary-card">
           <span className="summary-icon green">
             <Icon name="grid" />
           </span>
-          <p>Abiertos</p>
+          <p>Carpetas abiertas</p>
           <strong>{value(totals.open)}</strong>
           <small>En trámite actualmente</small>
         </article>
@@ -150,9 +152,9 @@ function Dashboard({
           <span className="summary-icon muted">
             <Icon name="document" />
           </span>
-          <p>Cerrados</p>
+          <p>Carpetas cerradas</p>
           <strong>{value(totals.closed)}</strong>
-          <small>Concluidos</small>
+          <small>Concluidas</small>
         </article>
         <button className="summary-card quick-card" onClick={() => navigate('personas')}>
           <span className="summary-icon">
@@ -168,8 +170,8 @@ function Dashboard({
       <section className="dashboard-table">
         <div className="panel-heading">
           <div>
-            <h2>Últimos expedientes</h2>
-            <p>Los registros más recientes del sistema.</p>
+            <h2>Últimas carpetas</h2>
+            <p>Las carpetas creadas más recientemente.</p>
           </div>
           <button className="secondary" disabled={loading} onClick={() => setRefresh(refresh + 1)}>
             ↻ Actualizar
@@ -181,31 +183,48 @@ function Dashboard({
           </div>
         ) : loading ? (
           <div className="empty-state" role="status">
-            Cargando expedientes…
+            Cargando carpetas…
           </div>
-        ) : files.length ? (
+        ) : folders.length ? (
           <div className="table-scroll">
             <table>
               <thead>
                 <tr>
-                  <th>Expediente</th>
-                  <th>Tipo de inicio</th>
+                  <th>Denominación</th>
+                  <th>Carpeta</th>
+                  <th>Ubicación</th>
                   <th>Estado</th>
                 </tr>
               </thead>
               <tbody>
-                {files.map(file => (
-                  <CaseRow key={file.id} file={file} onOpen={open}>
+                {folders.map(folder => (
+                  <tr
+                    key={folder.id}
+                    className="case-row"
+                    tabIndex={0}
+                    aria-label={`Abrir carpeta ${folder.denomination || folderName(folder.name)}`}
+                    onClick={() => open(folder)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        open(folder)
+                      }
+                    }}
+                  >
                     <td>
-                      <strong>{formatCaseNumber(file.number)}</strong>
+                      <strong>
+                        {folder.denomination ||
+                          (folder.expediente_number ? formatCaseNumber(folder.expediente_number) : `#${folder.expediente_id}`)}
+                      </strong>
                     </td>
-                    <td>{initiationTypes[file.init_type as InitiationType] || file.init_type}</td>
+                    <td>{folderName(folder.name)}</td>
+                    <td>{locationLabel(folder.location)}</td>
                     <td>
-                      <span className="status" data-status={file.status}>
-                        {statusLabel(file.status)}
+                      <span className="status" data-status={folder.status}>
+                        {statusLabel(folder.status)}
                       </span>
                     </td>
-                  </CaseRow>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -213,17 +232,17 @@ function Dashboard({
         ) : (
           <div className="empty-state">
             <Icon name="folder" />
-            <h3>Aún no hay expedientes</h3>
-            <p>Crea el primer expediente para comenzar a trabajar.</p>
+            <h3>Aún no hay carpetas</h3>
+            <p>Crea un expediente: su carpeta principal se crea con él.</p>
             <button className="primary" onClick={create}>
               Crear expediente
             </button>
           </div>
         )}
         <div className="table-footer">
-          <span>Mostrando los 5 expedientes más recientes</span>
-          <button className="row-link" onClick={() => navigate('expedientes')}>
-            Ver todos los expedientes →
+          <span>Mostrando las 5 carpetas más recientes</span>
+          <button className="row-link" onClick={() => navigate('carpetas')}>
+            Ver todas las carpetas →
           </button>
         </div>
       </section>
@@ -448,7 +467,7 @@ export default function App() {
             <Dashboard
               navigate={goTo}
               create={() => go(paths.newCase())}
-              open={selected => navigate(paths.caseFile(selected.id), { state: { caseFile: selected } })}
+              open={folder => navigate(paths.caseFile(folder.expediente_id, folder.id))}
             />
           ) : route.name === 'carpetas' ? (
             <FoldersList />

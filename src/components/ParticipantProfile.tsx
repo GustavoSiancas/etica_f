@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { caseStatuses, expedientesService, formatCal, formatCaseNumber, initiationTypes, statusLabel } from '../services/api'
-import type { CaseFile, CaseFilters, CaseStatus, InitiationType, Person, Role } from '../services/api'
+import { expedientesService, formatCal, formatCaseNumber, initiationTypes } from '../services/api'
+import type { CaseFile, CaseFilters, InitiationType, Person, Role } from '../services/api'
 import CaseRow from './CaseRow'
 
 const pageSize = 20
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'No se pudieron consultar los expedientes.'
-const emptyFilters = { status: '' as CaseStatus | '', from: '', to: '' }
+const emptyFilters = { from: '', to: '' }
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/)
@@ -25,21 +25,20 @@ export default function ParticipantProfile({ role, person, onBack, onOpenCase }:
   const [page, setPage] = useState<{ data: CaseFile[]; total: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [counts, setCounts] = useState<{ all: number; open: number; closed: number } | null>(null)
-
-  // Contadores generales del participante (sin filtros).
+  // Total de expedientes del participante (sin filtros). El estado ahora es de cada carpeta.
+  const [count, setCount] = useState<number | null>(null)
   useEffect(() => {
     let current = true
-    Promise.all([undefined, 'ABIERTO', 'CERRADO'].map(status => expedientesService.byParticipant(role, person.id, 1, 0, status ? { status: status as CaseStatus } : {})))
-      .then(([all, open, closed]) => { if (current) setCounts({ all: all.total, open: open.total, closed: closed.total }) })
-      .catch(() => { if (current) setCounts(null) })
+    expedientesService.byParticipant(role, person.id, 1, 0)
+      .then(result => { if (current) setCount(result.total) })
+      .catch(() => { if (current) setCount(null) })
     return () => { current = false }
   }, [role, person.id, refresh])
 
   useEffect(() => {
     let current = true
     setLoading(true); setError('')
-    const query: CaseFilters = { status: filters.status, from: filters.from, to: filters.to }
+    const query: CaseFilters = { from: filters.from, to: filters.to }
     expedientesService.byParticipant(role, person.id, pageSize, offset, query)
       .then(result => { if (current) setPage(result) })
       .catch(caught => { if (current) { setError(errorMessage(caught)); setPage(null) } })
@@ -48,9 +47,8 @@ export default function ParticipantProfile({ role, person, onBack, onOpenCase }:
   }, [role, person.id, offset, filters, refresh])
 
   const update = (patch: Partial<typeof emptyFilters>) => { setOffset(0); setFilters(current => ({ ...current, ...patch })) }
-  const filtered = filters.status !== '' || filters.from !== '' || filters.to !== ''
+  const filtered = filters.from !== '' || filters.to !== ''
   const rangeError = filters.from && filters.to && filters.from > filters.to
-  const value = (n?: number) => counts ? n : '—'
 
   return <div className="profile">
     <button className="secondary" onClick={onBack}>← Volver a {role}</button>
@@ -67,19 +65,14 @@ export default function ParticipantProfile({ role, person, onBack, onOpenCase }:
         </dl>
       </div>
       <div className="profile-stats">
-        <button type="button" className={filters.status === '' ? 'is-active' : ''} onClick={() => update({ status: '' })}><strong>{value(counts?.all)}</strong><span>Expedientes</span></button>
-        <button type="button" className={`is-open${filters.status === 'ABIERTO' ? ' is-active' : ''}`} onClick={() => update({ status: 'ABIERTO' })}><strong>{value(counts?.open)}</strong><span>Abiertos</span></button>
-        <button type="button" className={`is-closed${filters.status === 'CERRADO' ? ' is-active' : ''}`} onClick={() => update({ status: 'CERRADO' })}><strong>{value(counts?.closed)}</strong><span>Cerrados</span></button>
+        <button type="button" className="is-active" onClick={() => { setOffset(0); setFilters(emptyFilters) }}><strong>{count ?? '—'}</strong><span>Expedientes</span></button>
       </div>
     </section>
 
     <section className="dashboard-table profile-cases">
       <div className="panel-heading profile-toolbar">
-        <div><h2>Expedientes de {person.name.split(/\s+/)[0]}</h2><p>Abiertos y cerrados · más recientes primero</p></div>
+        <div><h2>Expedientes de {person.name.split(/\s+/)[0]}</h2><p>Más recientes primero</p></div>
         <div className="profile-filters">
-          <div className="status-filter" role="group" aria-label="Filtrar por estado">
-            {([['', 'Todos'], ...caseStatuses.map(option => [option.value, option.label])] as [CaseStatus | '', string][]).map(([status, label]) => <button key={status || 'all'} type="button" className={`status-filter-button${filters.status === status ? ' active' : ''}`} aria-pressed={filters.status === status} onClick={() => update({ status })}>{label}</button>)}
-          </div>
           <div className={`profile-range${rangeError ? ' is-invalid' : ''}`} role="group" aria-label="Fecha de apertura">
             <label><span>Desde</span><input type="date" value={filters.from} max={filters.to || undefined} onChange={event => update({ from: event.target.value })}/></label>
             <label><span>Hasta</span><input type="date" value={filters.to} min={filters.from || undefined} onChange={event => update({ to: event.target.value })}/></label>
@@ -90,12 +83,11 @@ export default function ParticipantProfile({ role, person, onBack, onOpenCase }:
       {error && <p className="api-error profile-error" role="alert">{error} <button type="button" className="row-link" onClick={() => setRefresh(n => n + 1)}>Reintentar</button></p>}
       {loading && !page ? <div className="empty-state" role="status">Cargando expedientes…</div>
         : page && page.data.length ? <div className={`table-scroll${loading ? ' is-refreshing' : ''}`}><table>
-          <thead><tr><th>Expediente</th><th>Fecha de apertura</th><th>Tipo de inicio</th><th>Estado</th><th aria-label="Abrir"/></tr></thead>
+          <thead><tr><th>Expediente</th><th>Fecha de apertura</th><th>Tipo de inicio</th><th aria-label="Abrir"/></tr></thead>
           <tbody>{page.data.map(file => <CaseRow key={file.id} file={file} onOpen={onOpenCase}>
             <td><strong>{formatCaseNumber(file.number)}</strong>{file.description && <small className="profile-case-desc">{file.description}</small>}</td>
             <td>{formatDate(file.opening_date)}</td>
             <td>{file.init_type ? initiationTypes[file.init_type as InitiationType] || file.init_type : 'Sin tipo'}</td>
-            <td><span className="status" data-status={file.status}>{statusLabel(file.status)}</span></td>
             <td className="profile-open">Ver →</td>
           </CaseRow>)}</tbody>
         </table></div>

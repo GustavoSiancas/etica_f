@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  caseStatuses,
   expedientesService,
   formatCal,
   formatCaseNumber,
   initiationTypes,
   peruDate,
   personasService,
-  statusLabel,
 } from '../services/api'
 import { navigate, paths, readRouteState, updateRouteState } from '../router'
 import type { CaseRef, Route } from '../router'
@@ -16,7 +14,7 @@ import PeopleRegistry from './PeopleRegistry'
 import ParticipantProfile from './ParticipantProfile'
 import CaseRow from './CaseRow'
 import { useAltCaseView } from '../caseView'
-import type { ActiveParticipant, CaseFile, CaseStatus, Person, Role, InitiationType } from '../services/api'
+import type { ActiveParticipant, CaseFile, Person, Role, InitiationType } from '../services/api'
 import CaseDocuments from './CaseDocuments'
 
 const pageSize = 20
@@ -416,7 +414,6 @@ export default function Management({ route }: { route: ManagementRoute }) {
   const [files, setFiles] = useState<CaseFile[]>([])
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
-  const [status, setStatus] = useState<CaseStatus | ''>('')
   const [range, setRange] = useState({ from: '', to: '' })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -425,7 +422,6 @@ export default function Management({ route }: { route: ManagementRoute }) {
     setError('')
     try {
       const page = await expedientesService.page(pageSize, offset, {
-        status,
         from: range.from,
         to: range.to,
       })
@@ -438,7 +434,7 @@ export default function Management({ route }: { route: ManagementRoute }) {
     } finally {
       setLoading(false)
     }
-  }, [offset, status, range])
+  }, [offset, range])
   const showList = route.name === 'expedientes' && !route.caseRef
   useEffect(() => {
     if (showList) void load()
@@ -447,15 +443,14 @@ export default function Management({ route }: { route: ManagementRoute }) {
   const personId = route.name === 'personas' ? route.personId : null
   const person = usePerson(peopleRole, personId)
   const openCase = (file: CaseFile) => navigate(paths.caseFile(file.id), { state: { caseFile: file } })
-  const filtered = status !== '' || range.from !== '' || range.to !== ''
+  const filtered = range.from !== '' || range.to !== ''
   const rangeInvalid = range.from !== '' && range.to !== '' && range.from > range.to
-  const filterBy = (next: { status?: CaseStatus | ''; from?: string; to?: string }) => {
+  const filterBy = (next: { from?: string; to?: string }) => {
     setOffset(0)
-    if (next.status !== undefined) setStatus(next.status)
     if (next.from !== undefined || next.to !== undefined)
       setRange(current => ({ from: next.from ?? current.from, to: next.to ?? current.to }))
   }
-  const clearFilters = () => filterBy({ status: '', from: '', to: '' })
+  const clearFilters = () => filterBy({ from: '', to: '' })
 
   if (route.name === 'personas') {
     // Registro → ficha de la persona → detalle del expediente. El registro queda montado (oculto) para conservar filtros y página.
@@ -520,24 +515,6 @@ export default function Management({ route }: { route: ManagementRoute }) {
       </div>
       <section className="dashboard-table case-list">
         <div className="panel-heading case-list-toolbar">
-          <div className="status-filter" role="group" aria-label="Filtrar por estado">
-            {(
-              [['', 'Todos'], ...caseStatuses.map(option => [option.value, option.label])] as [
-                CaseStatus | '',
-                string,
-              ][]
-            ).map(([value, label]) => (
-              <button
-                key={value || 'all'}
-                type="button"
-                className={`status-filter-button${status === value ? ' active' : ''}`}
-                aria-pressed={status === value}
-                onClick={() => filterBy({ status: value })}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
           <div className="case-list-actions">
             <div
               className={`profile-range${rangeInvalid ? ' is-invalid' : ''}`}
@@ -590,7 +567,6 @@ export default function Management({ route }: { route: ManagementRoute }) {
                   <th>Expediente</th>
                   <th>Fecha de apertura</th>
                   <th>Tipo de inicio</th>
-                  <th>Estado</th>
                 </tr>
               </thead>
               <tbody>
@@ -601,11 +577,6 @@ export default function Management({ route }: { route: ManagementRoute }) {
                     </td>
                     <td>{peruDate(file.opening_date) || 'Sin fecha'}</td>
                     <td>{initiationTypes[file.init_type as InitiationType] || file.init_type}</td>
-                    <td>
-                      <span className="status" data-status={file.status}>
-                        {statusLabel(file.status)}
-                      </span>
-                    </td>
                   </CaseRow>
                 ))}
               </tbody>

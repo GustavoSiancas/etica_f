@@ -231,3 +231,6 @@ body { font-size: 14px; }
     grid-template-rows: none;
   }
 }
+
+/* Listado de expedientes: sin filtro de estado, las acciones quedan a la derecha */
+.case-list-toolbar > .case-list-actions:only-child { margin-left: auto; }

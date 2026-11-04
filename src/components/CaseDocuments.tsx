@@ -1728,7 +1728,6 @@ function FolderTree({
         </p>
         <div className={`folder-state${locked ? ' is-locked' : ''}`}>
           <div className="folder-state-item">
-            <span className="folder-state-label">Estado</span>
             <div
               className="state-switch"
               data-value={folder.status}
@@ -1752,7 +1751,6 @@ function FolderTree({
             </div>
           </div>
           <div className="folder-state-item is-wide">
-            <span className="folder-state-label">Ubicación</span>
             <ol
               className="location-track"
               aria-label="Ubicación de la carpeta"

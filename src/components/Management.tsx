@@ -7,6 +7,7 @@ import {
   formatCaseNumber,
   initiationTypes,
   locationLabel,
+  peruDate,
   personasService,
   statusLabel,
 } from '../services/api'
@@ -281,6 +282,30 @@ function CaseDetail({
   const [message, setMessage] = useState<{ title: string; text: string } | null>(null)
   const [error, setError] = useState('')
   const closed = file.status === 'CERRADO'
+  const [descriptionDraft, setDescriptionDraft] = useState<string | null>(null)
+  const [descriptionError, setDescriptionError] = useState('')
+  useEffect(() => {
+    if (closed) setDescriptionDraft(null)
+  }, [closed])
+  async function saveDescription() {
+    if (descriptionDraft === null || saving) return
+    if (descriptionDraft.trim() === (file.description || '').trim()) {
+      setDescriptionDraft(null)
+      return
+    }
+    setSaving('description')
+    setDescriptionError('')
+    try {
+      const updated = { ...file, ...(await expedientesService.updateDescription(file.id, descriptionDraft)) }
+      setFile(updated)
+      onChanged(updated)
+      setDescriptionDraft(null)
+    } catch (caught) {
+      setDescriptionError(errorMessage(caught))
+    } finally {
+      setSaving(null)
+    }
+  }
   async function changeStatus(next: string) {
     if (saving || next === file.status) return
     setSaving('status:' + next)
@@ -331,11 +356,13 @@ function CaseDetail({
       ? [...locations, { value: file.location, label: locationLabel(file.location) }]
       : locations
   const currentStep = track.findIndex(option => option.value === file.location)
-  const parsed = file.opening_date ? new Date(file.opening_date + 'T00:00:00') : null
-  const formattedDate =
-    parsed && !Number.isNaN(parsed.getTime())
-      ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'long', timeZone: 'America/Lima' }).format(parsed)
-      : 'No disponible'
+  // La fecha de apertura puede llegar como YYYY-MM-DD o como instante UTC: se muestra el día en Perú.
+  const openingDay = peruDate(file.opening_date)
+  const formattedDate = openingDay
+    ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'long', timeZone: 'UTC' }).format(
+        new Date(openingDay + 'T00:00:00Z'),
+      )
+    : 'No disponible'
   return (
     <>
       {message && (
@@ -354,12 +381,69 @@ function CaseDetail({
           <p className="eyebrow">EXPEDIENTE</p>
           <h2 className="case-number">{formatCaseNumber(file.number)}</h2>
           <dl>
-            {file.description && (
-              <div>
-                <dt>Descripción</dt>
-                <dd>{file.description}</dd>
-              </div>
-            )}
+            <div>
+              <dt>Descripción</dt>
+              <dd>
+                {descriptionDraft === null ? (
+                  <div className="case-description">
+                    <span className={file.description?.trim() ? '' : 'is-empty'}>
+                      {file.description?.trim() || 'Sin descripción'}
+                    </span>
+                    <button
+                      type="button"
+                      className="row-link"
+                      disabled={closed || saving !== null}
+                      title={closed ? 'Reabre el expediente para editar la descripción.' : undefined}
+                      onClick={() => {
+                        setDescriptionError('')
+                        setDescriptionDraft(file.description || '')
+                      }}
+                    >
+                      Editar
+                    </button>
+                  </div>
+                ) : (
+                  <form
+                    className="case-description-form"
+                    onSubmit={event => {
+                      event.preventDefault()
+                      void saveDescription()
+                    }}
+                  >
+                    <textarea
+                      rows={3}
+                      autoFocus
+                      aria-label="Descripción del expediente"
+                      value={descriptionDraft}
+                      disabled={saving === 'description'}
+                      onChange={event => setDescriptionDraft(event.target.value)}
+                      onKeyDown={event => {
+                        if (event.key === 'Escape' && saving !== 'description') setDescriptionDraft(null)
+                      }}
+                      placeholder="Resumen breve del caso (déjalo vacío para quitarla)"
+                    />
+                    {descriptionError && (
+                      <p className="api-error" role="alert">
+                        {descriptionError}
+                      </p>
+                    )}
+                    <div className="case-description-actions">
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={saving === 'description'}
+                        onClick={() => setDescriptionDraft(null)}
+                      >
+                        Cancelar
+                      </button>
+                      <button className="primary" disabled={saving === 'description'}>
+                        {saving === 'description' ? 'Guardando…' : 'Guardar'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </dd>
+            </div>
             <div>
               <dt>Tipo de inicio</dt>
               <dd>{initiationTypes[file.init_type as InitiationType] || file.init_type}</dd>
@@ -368,18 +452,6 @@ function CaseDetail({
               <dt>Fecha de apertura</dt>
               <dd>{formattedDate}</dd>
             </div>
-            {file.created_at && (
-              <div>
-                <dt>Creado en sistema</dt>
-                <dd>
-                  {new Intl.DateTimeFormat('es-PE', {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                    timeZone: 'America/Lima',
-                  }).format(new Date(file.created_at))}
-                </dd>
-              </div>
-            )}
           </dl>
         </div>
         <div className="case-controls">
@@ -683,7 +755,7 @@ export default function Management({ route }: { route: ManagementRoute }) {
                     <td>
                       <strong>{formatCaseNumber(file.number)}</strong>
                     </td>
-                    <td>{file.opening_date || 'Sin fecha'}</td>
+                    <td>{peruDate(file.opening_date) || 'Sin fecha'}</td>
                     <td>{initiationTypes[file.init_type as InitiationType] || file.init_type}</td>
                     <td>{locationLabel(file.location)}</td>
                     <td>

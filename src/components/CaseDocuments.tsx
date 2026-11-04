@@ -6,7 +6,9 @@ import {
   documentsService,
   foldersService,
   maxUploadBytes,
+  peruDate,
   sectionsService,
+  todayInPeru,
 } from '../services/api'
 import type {
   DocumentRecord,
@@ -540,17 +542,20 @@ function DocumentForm({
   onCancel: () => void
   onCreate: (
     name: string,
+    date: string,
     file: File | null,
     retryId: number | null,
     setRetry: (id: number) => void,
     setStatus: (text: string) => void,
   ) => Promise<void>
   onLink: (document: DocumentRecord) => Promise<void>
-  onEdit: (name: string, file: File | null, setStatus: (text: string) => void) => Promise<void>
+  onEdit: (name: string, date: string, file: File | null, setStatus: (text: string) => void) => Promise<void>
 }) {
   const editing = dialog.mode === 'edit' ? dialog.document : null
   const [tab, setTab] = useState<'new' | 'existing'>('new')
   const [name, setName] = useState(editing?.name ?? '')
+  // Por defecto, la fecha de hoy en Perú; se puede cambiar antes de guardar.
+  const [date, setDate] = useState(editing ? peruDate(editing.document_date) : todayInPeru())
   const [file, setFile] = useState<File | null>(null)
   const [retryId, setRetryId] = useState<number | null>(null)
   const [status, setStatus] = useState('')
@@ -591,12 +596,12 @@ function DocumentForm({
     setSaving(true)
     setError('')
     try {
-      if (editing) await onEdit(name, file, setStatus)
+      if (editing) await onEdit(name, date, file, setStatus)
       else if (tab === 'existing') {
         const document = existing?.find(item => item.id === chosen)
         if (!document) throw new Error('Selecciona un documento para vincular.')
         await onLink(document)
-      } else await onCreate(name, file, retryId, setRetryId, setStatus)
+      } else await onCreate(name, date, file, retryId, setRetryId, setStatus)
     } catch (caught) {
       setError(errorMessage(caught))
       setStatus('')
@@ -654,6 +659,19 @@ function DocumentForm({
               disabled={retryId !== null}
               onChange={event => setName(event.target.value)}
               placeholder="Ej. Denuncia firmada.pdf"
+            />
+          </div>
+          <div>
+            <label htmlFor="document-date">
+              Fecha del documento {editing ? <span>(opcional)</span> : <b>*</b>}
+            </label>
+            <input
+              id="document-date"
+              type="date"
+              required={!editing}
+              value={date}
+              disabled={retryId !== null}
+              onChange={event => setDate(event.target.value)}
             />
           </div>
           <div>
@@ -792,6 +810,8 @@ function FolderForm({
 }) {
   const [types, setTypes] = useState<FolderType[] | null>(null)
   const [chosen, setChosen] = useState<number | null>(null)
+  // Por defecto, la fecha de hoy en Perú; se puede cambiar antes de crear.
+  const [openingDate, setOpeningDate] = useState(todayInPeru)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -819,7 +839,7 @@ function FolderForm({
     setSaving(true)
     setError('')
     try {
-      onCreated(await foldersService.create(expedienteId, chosen))
+      onCreated(await foldersService.create(expedienteId, chosen, openingDate))
     } catch (caught) {
       setError(errorMessage(caught))
       setSaving(false)
@@ -857,6 +877,21 @@ function FolderForm({
           <p className="tree-empty-inline">Este expediente ya tiene todas las carpetas disponibles.</p>
         )
       )}
+      {available.length > 0 && (
+        <div>
+          <label htmlFor="folder-opening-date">
+            Fecha de apertura <b>*</b>
+          </label>
+          <input
+            id="folder-opening-date"
+            type="date"
+            required
+            value={openingDate}
+            disabled={saving}
+            onChange={event => setOpeningDate(event.target.value)}
+          />
+        </div>
+      )}
       {error && (
         <p className="api-error" role="alert">
           {error}
@@ -866,7 +901,7 @@ function FolderForm({
         <button type="button" className="secondary" disabled={saving} onClick={onCancel}>
           Cancelar
         </button>
-        <button className="primary" disabled={saving || chosen === null}>
+        <button className="primary" disabled={saving || chosen === null || !openingDate}>
           {saving ? 'Creando…' : 'Añadir carpeta'}
         </button>
       </div>
@@ -1020,7 +1055,7 @@ export default function CaseDocuments({
         <Modal
           eyebrow="CARPETAS"
           title="Añadir carpeta"
-          description="Cada expediente tiene como máximo una carpeta de cada tipo."
+          description="Cada expediente tiene como máximo una carpeta de cada tipo. Indica su fecha de apertura."
           onClose={() => setAdding(false)}
         >
           <FolderForm
@@ -1324,6 +1359,7 @@ function FolderTree({
   async function createDocument(
     section: ExpedienteSection,
     name: string,
+    date: string,
     file: File | null,
     retryId: number | null,
     setRetry: (id: number) => void,
@@ -1331,7 +1367,10 @@ function FolderTree({
   ) {
     let document: DocumentRecord | null = null
     if (retryId === null) {
-      document = await sectionsService.createDocument(expedienteId, section.id, { name })
+      document = await sectionsService.createDocument(expedienteId, section.id, {
+        name,
+        document_date: date || undefined,
+      })
       setDocs(state => ({
         ...state,
         [section.id]: { items: [...(state[section.id]?.items || []), document!], loading: false, error: '' },
@@ -1353,12 +1392,16 @@ function FolderTree({
   async function editDocument(
     document: DocumentRecord,
     name: string,
+    date: string,
     file: File | null,
     setStatus: (text: string) => void,
   ) {
     let result = document
-    if (name.trim() !== document.name)
-      result = { ...result, ...(await documentsService.update(document.id, { name })) }
+    const patch: { name?: string; document_date?: string | null } = {}
+    if (name.trim() !== document.name) patch.name = name
+    if (date !== peruDate(document.document_date)) patch.document_date = date || null
+    if (Object.keys(patch).length)
+      result = { ...result, ...(await documentsService.update(document.id, patch)) }
     if (file) {
       setStatus('Subiendo archivo…')
       result = { ...result, ...(await documentsService.uploadFile(document.id, file)) }
@@ -1513,6 +1556,11 @@ function FolderTree({
                         ) : (
                           <span className="tree-file-tag is-missing">Sin archivo</span>
                         )}
+                        {document.document_date && (
+                          <span>
+                            <Icon name="calendar" size={13} /> {formatDate(peruDate(document.document_date))}
+                          </span>
+                        )}
                       </small>
                     </div>
                     <div className="tree-actions">
@@ -1576,7 +1624,15 @@ function FolderTree({
   return (
     <>
       <div className="folder-toolbar">
-        <p>{!loading && `${sections.length} ${sections.length === 1 ? 'sección' : 'secciones'}`}</p>
+        <p>
+          {folder.opening_date && (
+            <>
+              <Icon name="calendar" size={13} /> Apertura: {formatDate(peruDate(folder.opening_date))}
+              {!loading && ' · '}
+            </>
+          )}
+          {!loading && `${sections.length} ${sections.length === 1 ? 'sección' : 'secciones'}`}
+        </p>
         <div className="documents-actions">
           {sections.length > 0 && (
             <button
@@ -1681,7 +1737,7 @@ function FolderTree({
           title={documentDialog.mode === 'edit' ? 'Editar documento' : 'Agregar documento'}
           description={
             documentDialog.mode === 'edit'
-              ? 'Cambia el nombre o reemplaza su archivo.'
+              ? 'Cambia el nombre, la fecha o reemplaza su archivo.'
               : 'Crea un documento nuevo o reutiliza uno ya registrado en el expediente.'
           }
           onClose={() => setDocumentDialog(null)}
@@ -1691,12 +1747,18 @@ function FolderTree({
             expedienteId={expedienteId}
             sectionDocs={activeSection ? docs[activeSection.id]?.items || [] : []}
             onCancel={() => setDocumentDialog(null)}
-            onCreate={(name, file, retryId, setRetry, setStatus) =>
-              createDocument(activeSection!, name, file, retryId, setRetry, setStatus)
+            onCreate={(name, date, file, retryId, setRetry, setStatus) =>
+              createDocument(activeSection!, name, date, file, retryId, setRetry, setStatus)
             }
             onLink={document => linkDocument(activeSection!, document)}
-            onEdit={(name, file, setStatus) =>
-              editDocument((documentDialog as { document: DocumentRecord }).document, name, file, setStatus)
+            onEdit={(name, date, file, setStatus) =>
+              editDocument(
+                (documentDialog as { document: DocumentRecord }).document,
+                name,
+                date,
+                file,
+                setStatus,
+              )
             }
           />
         </Modal>

@@ -86,6 +86,8 @@ export interface ExpedienteFolder {
   expediente_id: number
   folder_type_id: number
   name: string
+  // Instante en UTC (p. ej. 2026-11-04T05:00:00Z = medianoche en Perú).
+  opening_date?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -116,6 +118,8 @@ export interface DocumentRecord {
   id: number
   name: string
   file_url?: string | null
+  // Instante en UTC (p. ej. 2026-11-04T05:00:00Z = medianoche en Perú).
+  document_date?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -315,6 +319,22 @@ export const expedientesService = {
   async statusOptions() {
     return list<ExpedienteStatus>(await request('/expediente-statuses'), 'statuses')
   },
+  // "" borra la descripción. Si el expediente está cerrado, el backend responde 409.
+  async updateDescription(id: number, description: string) {
+    try {
+      return await request<CaseFile>(
+        `/expedientes/${positiveId(id, 'El expediente')}/description`,
+        { description: description.trim() },
+        'PATCH',
+      )
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409)
+        throw new ApiError('El expediente está cerrado: reábrelo para editar la descripción.', 409)
+      if (error instanceof ApiError && error.status === 404)
+        throw new ApiError('No existe este expediente.', 404)
+      throw error
+    }
+  },
   updateStatus(id: number, status: string) {
     const value = status.trim()
     if (!value || value.length > 30) throw new Error('El estado es obligatorio y admite hasta 30 caracteres.')
@@ -454,8 +474,31 @@ function cleanSection(input: SectionInput, creating: boolean) {
   }
   return body
 }
-function cleanDocument(input: { name?: string; file_url?: string | null }, creating: boolean) {
-  const body: { name?: string; file_url?: string | null } = {}
+export interface DocumentInput {
+  name?: string
+  file_url?: string | null
+  // Fecha local de Perú en formato YYYY-MM-DD.
+  document_date?: string | null
+}
+const peruDay = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Lima',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+// Fecha de hoy en Perú (YYYY-MM-DD), para usar como valor por defecto.
+export function todayInPeru() {
+  return peruDay.format(new Date())
+}
+// Convierte la fecha UTC que devuelve el backend al día correspondiente en Perú.
+export function peruDate(value?: string | null) {
+  if (!value) return ''
+  if (isoDate.test(value)) return value
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '' : peruDay.format(date)
+}
+function cleanDocument(input: DocumentInput, creating: boolean) {
+  const body: DocumentInput = {}
   if (input.name !== undefined || creating) {
     const name = (input.name || '').trim()
     if (!name || name.length > 255)
@@ -470,6 +513,15 @@ function cleanDocument(input: { name?: string; file_url?: string | null }, creat
     )
       throw new Error('El enlace debe ser una URL HTTPS válida.')
     if (input.file_url || !creating) body.file_url = input.file_url || null
+  }
+  if (input.document_date !== undefined) {
+    if (input.document_date && !isoDate.test(input.document_date))
+      throw new Error('La fecha debe tener formato YYYY-MM-DD.')
+    // Al crear basta la fecha (el backend la toma como medianoche peruana);
+    // al modificar se envía con la zona horaria de Perú (UTC-5, sin horario de verano).
+    if (input.document_date)
+      body.document_date = creating ? input.document_date : `${input.document_date}T00:00:00-05:00`
+    else if (!creating) body.document_date = null
   }
   return body
 }
@@ -487,9 +539,12 @@ export const foldersService = {
     )
   },
   // Si la carpeta de ese tipo ya existe, el backend devuelve la misma sin duplicarla.
-  create(expedienteId: number, folderTypeId: number) {
+  // Las carpetas adicionales requieren su propia fecha de apertura (YYYY-MM-DD, hora de Perú).
+  create(expedienteId: number, folderTypeId: number, openingDate: string) {
+    if (!isoDate.test(openingDate)) throw new Error('Ingresa una fecha de apertura válida (YYYY-MM-DD).')
     return request<ExpedienteFolder>(`/expedientes/${positiveId(expedienteId, 'El expediente')}/folders`, {
       folder_type_id: positiveId(folderTypeId, 'El tipo de carpeta'),
+      opening_date: openingDate,
     })
   },
   // Secciones y subsecciones de una carpeta, como array plano.
@@ -560,7 +615,7 @@ export const sectionsService = {
       'documents',
     )
   },
-  createDocument(expedienteId: number, sectionId: number, input: { name: string; file_url?: string | null }) {
+  createDocument(expedienteId: number, sectionId: number, input: DocumentInput & { name: string }) {
     return request<DocumentRecord>(
       `/expedientes/${expedienteId}/sections/${sectionId}/documents`,
       cleanDocument(input, true),
@@ -614,10 +669,10 @@ export const documentsService = {
   get(id: number) {
     return request<DocumentRecord>(`/documents/${id}`)
   },
-  create(input: { name: string; file_url?: string | null }) {
+  create(input: DocumentInput & { name: string }) {
     return request<DocumentRecord>('/documents', cleanDocument(input, true))
   },
-  update(id: number, input: { name?: string; file_url?: string | null }) {
+  update(id: number, input: DocumentInput) {
     const body = cleanDocument(input, false)
     if (!Object.keys(body).length) throw new Error('No hay cambios para guardar.')
     return request<DocumentRecord>(`/documents/${id}`, body, 'PATCH')

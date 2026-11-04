@@ -130,3 +130,12 @@ body { font-size: 14px; }
   .management td, .management th { padding: 14px 16px; }
   .app-footer { padding: 16px; }.app-footer>span:last-child { display: none; }
 }
+
+.case-description { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.case-description > span { white-space: pre-wrap; flex: 1; min-width: 0; }
+.case-description > span.is-empty { color: var(--text-muted); font-style: italic; }
+.case-description .row-link { padding: 0 6px; font-size: 13px; }
+.case-description .row-link:disabled { opacity: .5; cursor: not-allowed; }
+.case-description-form { display: grid; gap: 8px; }
+.case-description-form textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; }
+.case-description-actions { display: flex; justify-content: flex-end; gap: 8px; }

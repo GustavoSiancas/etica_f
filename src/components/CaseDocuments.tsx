@@ -5,11 +5,13 @@ import {
   buildSectionTree,
   documentsService,
   foldersService,
+  folderName,
   maxUploadBytes,
   peruDate,
   sectionsService,
   todayInPeru,
 } from '../services/api'
+import { navigate, paths } from '../router'
 import type {
   DocumentRecord,
   ExpedienteFolder,
@@ -200,17 +202,6 @@ function fileKind(url?: string | null) {
   if (extension === 'doc' || extension === 'docx') return 'doc'
   if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension)) return 'img'
   return 'other'
-}
-// "EXPEDIENTE PRINCIPAL" → "Expediente Principal"
-const minorWords = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'o', 'en'])
-function folderName(name: string) {
-  return name
-    .toLowerCase()
-    .split(/\s+/)
-    .map((word, index) =>
-      index > 0 && minorWords.has(word) ? word : word.charAt(0).toUpperCase() + word.slice(1),
-    )
-    .join(' ')
 }
 
 function Modal({
@@ -886,7 +877,7 @@ function FolderForm({
                   <Icon name="folder" />
                 </span>
                 <span>
-                  <strong>{type.name}</strong>
+                  <strong>{folderName(type.name)}</strong>
                 </span>
               </button>
             </li>
@@ -896,6 +887,22 @@ function FolderForm({
         !error && (
           <p className="tree-empty-inline">Este expediente ya tiene todas las carpetas disponibles.</p>
         )
+      )}
+      {types !== null && (
+        <p className="tree-form-note">
+          ¿Falta un tipo? Créalo en{' '}
+          <a
+            className="row-link"
+            href={paths.folderTypes()}
+            onClick={event => {
+              event.preventDefault()
+              navigate(paths.folderTypes())
+            }}
+          >
+            Admin · Tipos de carpeta
+          </a>
+          .
+        </p>
       )}
       {available.length > 0 && (
         <div>

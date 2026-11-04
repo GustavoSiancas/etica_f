@@ -1,0 +1,206 @@
+/* Admin · Tipos de carpeta */
+.folder-types-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.folder-types-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px;
+  min-width: 0;
+}
+.folder-types-card h2 {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.folder-types-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.folder-types-form label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.folder-types-form input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+.folder-types-form input:focus {
+  outline: none;
+  border-color: var(--action);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+.folder-types-form small {
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+.folder-types-form .api-error,
+.folder-types-form .api-success {
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.folder-types-form .primary {
+  margin-top: 8px;
+  align-self: flex-start;
+}
+
+.folder-types-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.folder-types-list-heading h2 {
+  margin: 0;
+}
+.folder-types-count {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.folder-types-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.folder-types-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-alt);
+  min-width: 0;
+}
+.folder-types-list li.is-new {
+  border-color: var(--action);
+  box-shadow: 0 0 0 1px var(--action) inset;
+}
+.folder-types-list strong {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.folder-types-list small {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+.folder-types-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.folder-types-empty {
+  padding: 24px 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.folder-types-card > .api-error {
+  margin: 0 0 12px;
+  border-radius: 8px;
+}
+
+/* Sidebar: grupo Admin con interruptor ON/OFF */
+.nav-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.nav-label-row .nav-label {
+  margin-bottom: 8px;
+}
+.admin-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 22px 8px 8px 0;
+  padding: 3px 4px 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-alt);
+  color: var(--text-subtle);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.admin-switch-track {
+  position: relative;
+  width: 26px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background 0.15s ease;
+}
+.admin-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+.admin-switch[aria-checked='true'] {
+  border-color: var(--accent-border);
+  color: var(--accent-text);
+}
+.admin-switch[aria-checked='true'] .admin-switch-track {
+  background: var(--action, var(--accent-text));
+}
+.admin-switch[aria-checked='true'] .admin-switch-track::after {
+  transform: translateX(12px);
+}
+.admin-switch:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+
+@media (max-width: 900px) {
+  .folder-types-layout {
+    grid-template-columns: 1fr;
+  }
+}

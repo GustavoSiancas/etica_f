@@ -526,11 +526,36 @@ function cleanDocument(input: DocumentInput, creating: boolean) {
   return body
 }
 
+// "EXPEDIENTE PRINCIPAL" → "Expediente Principal"
+const minorWords = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'o', 'en'])
+export function folderName(name: string) {
+  return name
+    .toLowerCase()
+    .split(/\s+/)
+    .map((word, index) =>
+      index > 0 && minorWords.has(word) ? word : word.charAt(0).toUpperCase() + word.slice(1),
+    )
+    .join(' ')
+}
+
 // ---------- Carpetas del expediente ----------
 export const foldersService = {
   // Catálogo de nombres disponibles; los IDs se usan tal como llegan del backend.
   async types() {
     return list<FolderType>(await request('/folder-types'), 'folder_types')
+  },
+  // El backend guarda el nombre en mayúsculas. Duplicado → 409.
+  async createType(name: string) {
+    const value = name.trim()
+    if (!value || value.length > 255)
+      throw new Error('El nombre del tipo es obligatorio y admite hasta 255 caracteres.')
+    try {
+      return await request<FolderType>('/folder-types', { name: value })
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409)
+        throw new ApiError('Ya existe un tipo de carpeta con ese nombre.', 409)
+      throw error
+    }
   },
   async list(expedienteId: number) {
     return list<ExpedienteFolder>(

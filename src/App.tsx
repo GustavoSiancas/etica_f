@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import Management from './components/Management'
+import FolderTypesAdmin from './components/FolderTypesAdmin'
 import CaseRow from './components/CaseRow'
 import {
   expedientesService,
@@ -246,6 +247,24 @@ export default function App() {
   const [lastRole, setLastRole] = useState<Role>(route.name === 'personas' ? route.role : 'denunciantes')
   const [peopleExpanded, setPeopleExpanded] = useState(view === 'personas')
   const [menu, setMenu] = useState(false)
+  // Interruptor del grupo Admin; se recuerda en este navegador.
+  const [adminOn, setAdminOn] = useState(() => {
+    try {
+      return localStorage.getItem('admin-menu') === 'on'
+    } catch {
+      return false
+    }
+  })
+  const adminVisible = adminOn || route.name === 'folder-types'
+  function toggleAdmin() {
+    const next = !adminVisible
+    setAdminOn(next)
+    try {
+      localStorage.setItem('admin-menu', next ? 'on' : 'off')
+    } catch {
+      // Sin almacenamiento: el interruptor solo dura esta sesión.
+    }
+  }
   // Al entrar en Personas (por menú, enlace o botón atrás) se despliega su submenú.
   const [previousView, setPreviousView] = useState(view)
   if (view !== previousView) {
@@ -275,7 +294,9 @@ export default function App() {
         : 'Denunciados'
       : view
         ? views.find(item => item.id === view)?.label
-        : 'Página no encontrada'
+        : route.name === 'folder-types'
+          ? 'Admin / Tipos de carpeta'
+          : 'Página no encontrada'
 
   return (
     <div className="app-shell">
@@ -342,6 +363,34 @@ export default function App() {
             </div>
           )}
         </nav>
+        <div className="nav-label-row">
+          <p className="nav-label">ADMIN</p>
+          <button
+            type="button"
+            role="switch"
+            className="admin-switch"
+            aria-checked={adminVisible}
+            aria-controls="admin-subnav"
+            aria-label="Mostrar menú de administración"
+            onClick={toggleAdmin}
+          >
+            {adminVisible ? 'ON' : 'OFF'}
+            <span className="admin-switch-track" aria-hidden="true" />
+          </button>
+        </div>
+        {adminVisible && (
+          <nav aria-label="Administración" id="admin-subnav">
+            <button
+              className={route.name === 'folder-types' ? 'selected' : ''}
+              aria-current={route.name === 'folder-types' ? 'page' : undefined}
+              onClick={() => go(paths.folderTypes())}
+            >
+              <Icon name="folder" />
+              Añadir tipo de carpeta
+              {route.name === 'folder-types' && <span className="nav-dot" />}
+            </button>
+          </nav>
+        )}
         <div className="sidebar-bottom">
           <span className="workspace-avatar">EC</span>
           <div>
@@ -374,6 +423,8 @@ export default function App() {
               create={() => go(paths.newCase())}
               open={selected => navigate(paths.caseFile(selected.id), { state: { caseFile: selected } })}
             />
+          ) : route.name === 'folder-types' ? (
+            <FolderTypesAdmin />
           ) : route.name === 'not-found' ? (
             <NotFound />
           ) : (

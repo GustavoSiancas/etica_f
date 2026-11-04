@@ -11,6 +11,7 @@ import {
 } from './services/api'
 import type { CaseFile, InitiationType, Role } from './services/api'
 import { navigate, paths, useRoute } from './router'
+import { setAltCaseView, useAltCaseView } from './caseView'
 import type { Route } from './router'
 import './App.css'
 import AppearancePicker from './components/AppearancePicker'
@@ -247,6 +248,7 @@ export default function App() {
   const [lastRole, setLastRole] = useState<Role>(route.name === 'personas' ? route.role : 'denunciantes')
   const [peopleExpanded, setPeopleExpanded] = useState(view === 'personas')
   const [menu, setMenu] = useState(false)
+  const altCaseView = useAltCaseView()
   // Interruptor del grupo Admin; se recuerda en este navegador.
   const [adminOn, setAdminOn] = useState(() => {
     try {
@@ -414,7 +416,21 @@ export default function App() {
               Ética CAL <span>/</span> <strong>{sectionLabel}</strong>
             </span>
           </div>
-          <AppearancePicker />
+          <div className="topbar-actions">
+            {/* Solo dentro de un expediente (/expedientes/:id o desde una persona). */}
+            {(route.name === 'expedientes' || route.name === 'personas') && route.caseRef && (
+              <button
+                type="button"
+                className={`topbar-button${altCaseView ? ' is-active' : ''}`}
+                aria-pressed={altCaseView}
+                title={altCaseView ? 'Volver a la vista normal' : 'Cambiar a la vista alternativa'}
+                onClick={() => setAltCaseView(!altCaseView)}
+              >
+                Vista alternativa <span aria-hidden="true">{altCaseView ? '◧' : '▤'}</span>
+              </button>
+            )}
+            <AppearancePicker />
+          </div>
         </header>
         <main className="workspace-content">
           {route.name === 'dashboard' ? (

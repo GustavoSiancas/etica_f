@@ -153,3 +153,68 @@ body { font-size: 14px; }
 .case-back:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
 .case-hero-top + .case-number { margin-top: 12px; }
 .management .case-hero { margin-top: 0; }
+
+/* Botones de la barra superior junto a Apariencia */
+.topbar-actions { display: flex; align-items: center; gap: 8px; }
+.topbar-button {
+  display: flex; align-items: center; gap: 8px; box-shadow: var(--shadow-xs);
+  height: 36px; padding: 0 12px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.topbar-button:hover { background: var(--surface-alt); }
+.topbar-button span { font-size: 15px; color: var(--accent-text); }
+@media (max-width: 760px) { .topbar-button { height: 34px; padding: 0 10px; font-size: 12.5px; } }
+
+.topbar-button.is-active { border-color: var(--accent-border); background: var(--accent-soft); color: var(--accent-text); }
+
+/* Detalle del expediente: vista normal y vista alternativa con los mismos bloques */
+.case-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-areas: 'hero hero' 'docs people';
+  gap: 20px;
+  align-items: start;
+}
+.case-view > .case-summary { grid-area: hero; margin: 0; }
+.case-view > .documents-panel { grid-area: docs; min-width: 0; }
+.case-view > .case-participants { grid-area: people; min-width: 0; }
+
+/* Alternativa: columna lateral (info, denunciantes, denunciados) y documentos a la derecha */
+.case-view.is-alt {
+  grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-areas: 'hero docs' 'people docs';
+  grid-template-rows: auto 1fr;
+}
+.case-view.is-alt > .case-hero {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 18px;
+  padding: 22px;
+}
+.case-view.is-alt .case-summary dl > div { grid-template-columns: 92px 1fr; gap: 10px; }
+.case-view.is-alt .case-number { font-size: 26px !important; margin-bottom: 14px !important; }
+.case-view.is-alt .case-controls {
+  grid-template-columns: 1fr;
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  align-self: stretch;
+}
+.case-view.is-alt .control-card { min-height: 0; padding: 16px; gap: 12px; }
+.case-view.is-alt > .case-participants { align-self: start; }
+.case-view.is-alt > .documents-panel { align-self: stretch; }
+
+@media (max-width: 1100px) {
+  .case-view { grid-template-columns: minmax(0, 1fr) 260px; }
+  .case-view.is-alt { grid-template-columns: 300px minmax(0, 1fr); }
+}
+@media (max-width: 900px) {
+  .case-view,
+  .case-view.is-alt {
+    grid-template-columns: 1fr;
+    grid-template-areas: 'hero' 'docs' 'people';
+    grid-template-rows: none;
+  }
+}

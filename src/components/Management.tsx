@@ -18,6 +18,7 @@ import PeopleRegistry from './PeopleRegistry'
 import ParticipantProfile from './ParticipantProfile'
 import useLocations from './useLocations'
 import CaseRow from './CaseRow'
+import { useAltCaseView } from '../caseView'
 import type { ActiveParticipant, CaseFile, CaseStatus, Person, Role, InitiationType } from '../services/api'
 import CaseDocuments from './CaseDocuments'
 import SuccessDialog from './SuccessDialog'
@@ -282,6 +283,7 @@ function CaseDetail({
   const [message, setMessage] = useState<{ title: string; text: string } | null>(null)
   const [error, setError] = useState('')
   const closed = file.status === 'CERRADO'
+  const altView = useAltCaseView()
   const [descriptionDraft, setDescriptionDraft] = useState<string | null>(null)
   const [descriptionError, setDescriptionError] = useState('')
   useEffect(() => {
@@ -373,160 +375,161 @@ function CaseDetail({
           onClose={() => setMessage(null)}
         />
       )}
-      <section className="case-summary case-hero">
-        <div className="case-summary-main">
-          <div className="case-hero-top">
-            <button type="button" className="case-back" onClick={onBack} title={backLabel}>
-              <span aria-hidden="true">←</span> {backLabel}
-            </button>
-            <p className="eyebrow">EXPEDIENTE</p>
-          </div>
-          <h2 className="case-number">{formatCaseNumber(file.number)}</h2>
-          <dl>
-            <div>
-              <dt>Descripción</dt>
-              <dd>
-                {descriptionDraft === null ? (
-                  <div className="case-description">
-                    <span className={file.description?.trim() ? '' : 'is-empty'}>
-                      {file.description?.trim() || 'Sin descripción'}
-                    </span>
-                    <button
-                      type="button"
-                      className="row-link"
-                      disabled={closed || saving !== null}
-                      title={closed ? 'Reabre el expediente para editar la descripción.' : undefined}
-                      onClick={() => {
-                        setDescriptionError('')
-                        setDescriptionDraft(file.description || '')
-                      }}
-                    >
-                      Editar
-                    </button>
-                  </div>
-                ) : (
-                  <form
-                    className="case-description-form"
-                    onSubmit={event => {
-                      event.preventDefault()
-                      void saveDescription()
-                    }}
-                  >
-                    <textarea
-                      rows={3}
-                      autoFocus
-                      aria-label="Descripción del expediente"
-                      value={descriptionDraft}
-                      disabled={saving === 'description'}
-                      onChange={event => setDescriptionDraft(event.target.value)}
-                      onKeyDown={event => {
-                        if (event.key === 'Escape' && saving !== 'description') setDescriptionDraft(null)
-                      }}
-                      placeholder="Resumen breve del caso (déjalo vacío para quitarla)"
-                    />
-                    {descriptionError && (
-                      <p className="api-error" role="alert">
-                        {descriptionError}
-                      </p>
-                    )}
-                    <div className="case-description-actions">
+      {/* Mismos bloques en ambas vistas; solo cambia su ubicación (CSS), así no se pierde lo abierto. */}
+      <div className={`case-view${altView ? ' is-alt' : ''}`}>
+        <section className="case-summary case-hero">
+          <div className="case-summary-main">
+            <div className="case-hero-top">
+              <button type="button" className="case-back" onClick={onBack} title={backLabel}>
+                <span aria-hidden="true">←</span> {backLabel}
+              </button>
+              <p className="eyebrow">EXPEDIENTE</p>
+            </div>
+            <h2 className="case-number">{formatCaseNumber(file.number)}</h2>
+            <dl>
+              <div>
+                <dt>Descripción</dt>
+                <dd>
+                  {descriptionDraft === null ? (
+                    <div className="case-description">
+                      <span className={file.description?.trim() ? '' : 'is-empty'}>
+                        {file.description?.trim() || 'Sin descripción'}
+                      </span>
                       <button
                         type="button"
-                        className="secondary"
-                        disabled={saving === 'description'}
-                        onClick={() => setDescriptionDraft(null)}
+                        className="row-link"
+                        disabled={closed || saving !== null}
+                        title={closed ? 'Reabre el expediente para editar la descripción.' : undefined}
+                        onClick={() => {
+                          setDescriptionError('')
+                          setDescriptionDraft(file.description || '')
+                        }}
                       >
-                        Cancelar
-                      </button>
-                      <button className="primary" disabled={saving === 'description'}>
-                        {saving === 'description' ? 'Guardando…' : 'Guardar'}
+                        Editar
                       </button>
                     </div>
-                  </form>
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>Tipo de inicio</dt>
-              <dd>{initiationTypes[file.init_type as InitiationType] || file.init_type}</dd>
-            </div>
-            <div>
-              <dt>Fecha de apertura</dt>
-              <dd>{formattedDate}</dd>
-            </div>
-          </dl>
-        </div>
-        <div className="case-controls">
-          <div className="control-card">
-            <span className="control-label">Estado</span>
-            <div
-              className="state-switch"
-              data-value={file.status}
-              role="radiogroup"
-              aria-label="Estado del expediente"
-            >
-              <span className="state-switch-thumb" aria-hidden="true" />
-              {caseStatuses.map(option => (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={file.status === option.value}
-                  disabled={saving !== null}
-                  onClick={() => void changeStatus(option.value)}
-                >
-                  <span className="state-dot" aria-hidden="true" />
-                  {saving === 'status:' + option.value ? 'Guardando…' : option.label}
-                </button>
-              ))}
-            </div>
-            <small className="control-hint">
-              {closed
-                ? 'Cerrado: no se pueden agregar secciones ni documentos.'
-                : 'En trámite. Se pueden agregar secciones y documentos.'}
-            </small>
+                  ) : (
+                    <form
+                      className="case-description-form"
+                      onSubmit={event => {
+                        event.preventDefault()
+                        void saveDescription()
+                      }}
+                    >
+                      <textarea
+                        rows={3}
+                        autoFocus
+                        aria-label="Descripción del expediente"
+                        value={descriptionDraft}
+                        disabled={saving === 'description'}
+                        onChange={event => setDescriptionDraft(event.target.value)}
+                        onKeyDown={event => {
+                          if (event.key === 'Escape' && saving !== 'description') setDescriptionDraft(null)
+                        }}
+                        placeholder="Resumen breve del caso (déjalo vacío para quitarla)"
+                      />
+                      {descriptionError && (
+                        <p className="api-error" role="alert">
+                          {descriptionError}
+                        </p>
+                      )}
+                      <div className="case-description-actions">
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={saving === 'description'}
+                          onClick={() => setDescriptionDraft(null)}
+                        >
+                          Cancelar
+                        </button>
+                        <button className="primary" disabled={saving === 'description'}>
+                          {saving === 'description' ? 'Guardando…' : 'Guardar'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Tipo de inicio</dt>
+                <dd>{initiationTypes[file.init_type as InitiationType] || file.init_type}</dd>
+              </div>
+              <div>
+                <dt>Fecha de apertura</dt>
+                <dd>{formattedDate}</dd>
+              </div>
+            </dl>
           </div>
-          <div className="control-card">
-            <span className="control-label">Ubicación</span>
-            <ol
-              className="location-track"
-              aria-label="Ubicación del expediente"
-              style={
-                {
-                  '--steps': track.length,
-                  '--track-progress': currentStep < 0 ? 0 : currentStep / Math.max(1, track.length - 1),
-                } as CSSProperties
-              }
-            >
-              {track.map((option, index) => (
-                <li
-                  key={option.value}
-                  className={index < currentStep ? 'is-done' : index === currentStep ? 'is-current' : ''}
-                >
+          <div className="case-controls">
+            <div className="control-card">
+              <span className="control-label">Estado</span>
+              <div
+                className="state-switch"
+                data-value={file.status}
+                role="radiogroup"
+                aria-label="Estado del expediente"
+              >
+                <span className="state-switch-thumb" aria-hidden="true" />
+                {caseStatuses.map(option => (
                   <button
+                    key={option.value}
                     type="button"
+                    role="radio"
+                    aria-checked={file.status === option.value}
                     disabled={saving !== null}
-                    aria-current={index === currentStep ? 'step' : undefined}
-                    title={`Mover a ${option.label}`}
-                    onClick={() => void changeLocation(option.value)}
+                    onClick={() => void changeStatus(option.value)}
                   >
-                    <span className="track-dot" aria-hidden="true">
-                      {saving === 'location:' + option.value ? <span className="track-spinner" /> : index + 1}
-                    </span>
-                    <span className="track-label">{option.label}</span>
+                    <span className="state-dot" aria-hidden="true" />
+                    {saving === 'status:' + option.value ? 'Guardando…' : option.label}
                   </button>
-                </li>
-              ))}
-            </ol>
+                ))}
+              </div>
+              <small className="control-hint">
+                {closed
+                  ? 'Cerrado: no se pueden agregar secciones ni documentos.'
+                  : 'En trámite. Se pueden agregar secciones y documentos.'}
+              </small>
+            </div>
+            <div className="control-card">
+              <span className="control-label">Ubicación</span>
+              <ol
+                className="location-track"
+                aria-label="Ubicación del expediente"
+                style={
+                  {
+                    '--steps': track.length,
+                    '--track-progress': currentStep < 0 ? 0 : currentStep / Math.max(1, track.length - 1),
+                  } as CSSProperties
+                }
+              >
+                {track.map((option, index) => (
+                  <li
+                    key={option.value}
+                    className={index < currentStep ? 'is-done' : index === currentStep ? 'is-current' : ''}
+                  >
+                    <button
+                      type="button"
+                      disabled={saving !== null}
+                      aria-current={index === currentStep ? 'step' : undefined}
+                      title={`Mover a ${option.label}`}
+                      onClick={() => void changeLocation(option.value)}
+                    >
+                      <span className="track-dot" aria-hidden="true">
+                        {saving === 'location:' + option.value ? <span className="track-spinner" /> : index + 1}
+                      </span>
+                      <span className="track-label">{option.label}</span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </div>
+            {error && (
+              <p className="api-error case-controls-feedback" role="alert">
+                {error}
+              </p>
+            )}
           </div>
-          {error && (
-            <p className="api-error case-controls-feedback" role="alert">
-              {error}
-            </p>
-          )}
-        </div>
-      </section>
-      <div className="case-detail-layout">
+        </section>
         <CaseDocuments
           expedienteId={file.id}
           locked={closed}

@@ -1,0 +1,284 @@
+/* ==========================================================================
+   Movimiento y detalles visuales comunes.
+   Reglas: entradas cortas (≤ 320 ms), solo opacidad y desplazamientos pequeños,
+   nada que se repita sin fin salvo indicadores de carga, y todo se apaga con
+   "reducir movimiento". La hoja de carpetas tiene su propio criterio (CaseDocuments.css).
+   ========================================================================== */
+
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes softIn {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes dropIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+@keyframes noticeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.99);
+  }
+}
+@keyframes highlight {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--action) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+}
+@keyframes spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Encabezados y tarjetas de cada página ---------- */
+.page-heading > div {
+  animation: riseIn 0.32s var(--ease) both;
+}
+.page-heading > .primary {
+  animation: softIn 0.32s var(--ease) 0.08s both;
+}
+.summary-grid > * {
+  animation: riseIn 0.32s var(--ease) both;
+}
+.summary-grid > :nth-child(2) {
+  animation-delay: 0.04s;
+}
+.summary-grid > :nth-child(3) {
+  animation-delay: 0.08s;
+}
+.summary-grid > :nth-child(4) {
+  animation-delay: 0.12s;
+}
+.summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.summary-card .summary-icon {
+  transition: transform 0.25s var(--ease);
+}
+.summary-card:hover .summary-icon {
+  transform: scale(1.06) rotate(-3deg);
+}
+.quick-card:hover h3 span {
+  transform: translate(2px, -2px);
+}
+.dashboard-table,
+.management-panel,
+.folder-types-card,
+.profile-hero,
+.participant-workspace {
+  animation: riseIn 0.34s var(--ease) 0.06s both;
+}
+.folder-types-layout > :nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+/* Detalle del expediente: los bloques entran en orden */
+.case-view > .case-summary {
+  animation: riseIn 0.32s var(--ease) both;
+}
+.case-view > .documents-panel {
+  animation: riseIn 0.34s var(--ease) 0.06s both;
+}
+.case-view > .case-participants > * {
+  animation: riseIn 0.34s var(--ease) 0.1s both;
+}
+.case-view > .case-participants > :nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+/* ---------- Tablas ---------- */
+tbody tr.case-row {
+  animation: softIn 0.3s var(--ease) both;
+  transition: background-color 0.15s var(--ease);
+}
+tbody tr.case-row:nth-child(2) { animation-delay: 0.02s; }
+tbody tr.case-row:nth-child(3) { animation-delay: 0.04s; }
+tbody tr.case-row:nth-child(4) { animation-delay: 0.06s; }
+tbody tr.case-row:nth-child(5) { animation-delay: 0.08s; }
+tbody tr.case-row:nth-child(6) { animation-delay: 0.1s; }
+tbody tr.case-row:nth-child(7) { animation-delay: 0.12s; }
+tbody tr.case-row:nth-child(8) { animation-delay: 0.14s; }
+tbody tr.case-row:nth-child(n + 9) { animation-delay: 0.16s; }
+/* Al pasar el mouse: barra de acento a la izquierda y el primer dato se desplaza un poco */
+tbody tr.case-row > td:first-child {
+  box-shadow: inset 0 0 0 transparent;
+  transition: box-shadow 0.18s var(--ease);
+}
+tbody tr.case-row:hover > td:first-child,
+tbody tr.case-row:focus-visible > td:first-child {
+  box-shadow: inset 3px 0 0 var(--action);
+}
+tbody tr.case-row > td:first-child > * {
+  display: inline-block;
+  transition: transform 0.18s var(--ease);
+}
+tbody tr.case-row:hover > td:first-child > * {
+  transform: translateX(3px);
+}
+.profile-open {
+  transition: transform 0.18s var(--ease);
+}
+tbody tr.case-row:hover .profile-open {
+  transform: translateX(3px);
+}
+.status {
+  transition:
+    background-color 0.2s var(--ease),
+    color 0.2s var(--ease);
+}
+
+/* ---------- Estados vacíos y de carga ---------- */
+.empty-state:not([role='status']) {
+  animation: riseIn 0.3s var(--ease) both;
+}
+.empty-state:not([role='status']) > svg,
+.documents-empty > span {
+  animation: riseIn 0.4s var(--ease) 0.06s both;
+}
+/* Cualquier "Cargando…" lleva un indicador giratorio */
+.empty-state[role='status'] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  animation: softIn 0.2s ease-out both;
+}
+.empty-state[role='status']::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--action);
+  animation: spinner 0.75s linear infinite;
+}
+
+/* ---------- Avisos ---------- */
+.api-success,
+.api-error,
+.inline-success {
+  animation: noticeIn 0.22s var(--ease) both;
+}
+
+/* ---------- Botones ---------- */
+button:not(:disabled):active,
+.primary:not(:disabled):active,
+.secondary:not(:disabled):active {
+  transform: scale(0.97);
+}
+.primary:not(:disabled):hover {
+  box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--action) 80%, transparent);
+}
+.status-filter-button,
+.folders-segmented button {
+  transition:
+    background-color 0.18s var(--ease),
+    color 0.18s var(--ease),
+    box-shadow 0.18s var(--ease);
+}
+:focus-visible {
+  transition: outline-offset 0.15s var(--ease);
+}
+
+/* ---------- Menú lateral ---------- */
+.sidebar nav > button {
+  position: relative;
+}
+.sidebar nav > button::before {
+  content: '';
+  position: absolute;
+  left: -20px;
+  top: 50%;
+  width: 3px;
+  height: 60%;
+  border-radius: 0 3px 3px 0;
+  background: var(--action);
+  transform: translateY(-50%) scaleY(0);
+  transition: transform 0.22s var(--ease);
+}
+.sidebar nav > button.selected::before {
+  transform: translateY(-50%) scaleY(1);
+}
+.sidebar nav > button > svg {
+  transition: transform 0.2s var(--ease);
+}
+.sidebar nav > button:hover > svg {
+  transform: scale(1.08);
+}
+.sidebar-subnav,
+#admin-subnav {
+  animation: dropIn 0.2s var(--ease) both;
+}
+.admin-switch {
+  transition:
+    border-color 0.2s var(--ease),
+    color 0.2s var(--ease);
+}
+.topbar-button,
+.appearance-picker summary {
+  transition:
+    background-color 0.18s var(--ease),
+    border-color 0.18s var(--ease),
+    color 0.18s var(--ease);
+}
+
+/* ---------- Participantes del expediente ---------- */
+.case-people-list li {
+  transition: background-color 0.15s var(--ease);
+}
+.case-people-list li:hover .person-avatar {
+  transform: scale(1.06);
+}
+.person-avatar {
+  transition: transform 0.2s var(--ease);
+}
+
+/* ---------- Admin: tipos de carpeta ---------- */
+.folder-types-list li {
+  animation: riseIn 0.28s var(--ease) both;
+  transition:
+    border-color 0.15s var(--ease),
+    transform 0.15s var(--ease);
+}
+.folder-types-list li:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
+}
+.folder-types-list li.is-new {
+  animation:
+    riseIn 0.28s var(--ease) both,
+    highlight 0.9s ease-out 0.15s 2;
+}
+
+/* ---------- Carpetas (listado global) ---------- */
+.folders-abbr {
+  transition: transform 0.18s var(--ease);
+}
+tbody tr.case-row:hover .folders-abbr {
+  transform: scale(1.06);
+}
+
+/* ---------- Reducir movimiento ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0s !important;
+    transition-duration: 0.01ms !important;
+  }
+}

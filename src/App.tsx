@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Management from './components/Management'
 import FolderTypesAdmin from './components/FolderTypesAdmin'
 import FoldersList from './components/FoldersList'
@@ -22,6 +22,7 @@ import './modern.css'
 import './components/CaseDocuments.css'
 import './components/CaseCreateDialog.css'
 import './components/ParticipantProfile.css'
+import './motion.css'
 
 type View = 'dashboard' | 'expedientes' | 'carpetas' | 'personas'
 const views = [
@@ -78,6 +79,30 @@ function Icon({ name }: { name: string }) {
     </svg>
   )
 }
+const reducedMotion = () =>
+  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+// Número que sube desde 0 hasta su valor (≈0,6 s, desacelerando al final).
+function CountUp({ value }: { value: number }) {
+  const [shown, setShown] = useState(reducedMotion() ? value : 0)
+  useEffect(() => {
+    if (reducedMotion()) {
+      setShown(value)
+      return
+    }
+    let frame = 0
+    const start = performance.now()
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - start) / 600)
+      setShown(Math.round(value * (1 - Math.pow(1 - progress, 3))))
+      if (progress < 1) frame = requestAnimationFrame(step)
+    }
+    frame = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(frame)
+  }, [value])
+  return <>{shown}</>
+}
+
 function Dashboard({
   navigate,
   open,
@@ -119,7 +144,7 @@ function Dashboard({
       cancelled = true
     }
   }, [refresh])
-  const value = (count: number) => (loading ? '…' : error ? '—' : count)
+  const value = (count: number) => (loading ? '…' : error ? '—' : <CountUp value={count} />)
   return (
     <>
       <div className="page-heading">
@@ -277,6 +302,21 @@ export default function App() {
   const [peopleExpanded, setPeopleExpanded] = useState(view === 'personas')
   const [menu, setMenu] = useState(false)
   const altCaseView = useAltCaseView()
+  // Entrada suave al cambiar de pantalla. Cambiar de carpeta dentro del mismo expediente no cuenta.
+  const mainRef = useRef<HTMLElement>(null)
+  const pageKey = [
+    route.name,
+    route.name === 'personas' ? `${route.role}:${route.personId ?? ''}` : '',
+    route.name === 'expedientes' || route.name === 'personas' ? (route.caseRef?.id ?? '') : '',
+  ].join('|')
+  useEffect(() => {
+    if (reducedMotion()) return
+    mainRef.current?.animate?.(
+      // Solo opacidad: los bloques de cada página ya traen su propia entrada (motion.css).
+      [{ opacity: 0.4 }, { opacity: 1 }],
+      { duration: 200, easing: 'ease-out' },
+    )
+  }, [pageKey])
   // Interruptor del grupo Admin; se recuerda en este navegador.
   const [adminOn, setAdminOn] = useState(() => {
     try {
@@ -462,7 +502,7 @@ export default function App() {
             <AppearancePicker />
           </div>
         </header>
-        <main className="workspace-content">
+        <main className="workspace-content" ref={mainRef}>
           {route.name === 'dashboard' ? (
             <Dashboard
               navigate={goTo}

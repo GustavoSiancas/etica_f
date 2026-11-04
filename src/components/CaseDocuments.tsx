@@ -3,6 +3,9 @@ import type { CSSProperties, FormEvent, ReactNode } from 'react'
 import {
   acceptedUploads,
   buildSectionTree,
+  caseStatuses,
+  locationLabel,
+  statusLabel,
   documentsService,
   foldersService,
   folderName,
@@ -12,6 +15,7 @@ import {
   todayInPeru,
 } from '../services/api'
 import { navigate, paths } from '../router'
+import useLocations from './useLocations'
 import type {
   DocumentRecord,
   ExpedienteFolder,
@@ -25,8 +29,7 @@ const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : 'Ocurrió un error inesperado.'
 const sectionColors = ['#2563EB', '#0E9F6E', '#D97706', '#DC2626', '#7C3AED', '#DB2777', '#0891B2', '#808080']
 const defaultTypes = ['Escrito de oficio', 'Resolución', 'OTROS']
-const lockedMessage =
-  'El expediente está cerrado: no se pueden agregar ni modificar carpetas, secciones o documentos.'
+const lockedMessage = 'La carpeta está cerrada: reábrela para agregar o modificar secciones y documentos.'
 
 type DocsState = { items: DocumentRecord[]; loading: boolean; error: string }
 type SectionDialog =
@@ -939,12 +942,10 @@ function FolderForm({
 // Navegación expediente → carpeta → secciones. Cada carpeta carga su propio árbol.
 export default function CaseDocuments({
   expedienteId,
-  locked = false,
   folderId = null,
   onFolderChange,
 }: {
   expedienteId: number
-  locked?: boolean
   // Carpeta indicada en la URL; si no existe se muestra la primera.
   folderId?: number | null
   onFolderChange?: (folderId: number) => void
@@ -955,9 +956,6 @@ export default function CaseDocuments({
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [adding, setAdding] = useState(false)
-  useEffect(() => {
-    if (locked) setAdding(false)
-  }, [locked])
   useEffect(() => {
     let current = true
     setLoading(true)
@@ -990,6 +988,8 @@ export default function CaseDocuments({
     select(next.id)
     setAdding(false)
   }
+  const updated = (next: ExpedienteFolder) =>
+    setFolders(state => state.map(item => (item.id === next.id ? { ...item, ...next } : item)))
   return (
     <section className="documents-panel tree-panel">
       <div className="detail-panel-heading">
@@ -998,12 +998,6 @@ export default function CaseDocuments({
           <h3>Documentos</h3>
         </div>
       </div>
-      {locked && (
-        <p className="tree-locked-banner" role="note">
-          <Icon name="lock" /> Expediente cerrado · solo lectura. Reábrelo para agregar o modificar carpetas,
-          secciones y documentos.
-        </p>
-      )}
       {error && (
         <p className="api-error tree-notice" role="alert">
           {error}{' '}
@@ -1030,7 +1024,15 @@ export default function CaseDocuments({
               </span>
               <span className="folder-tab-text">
                 <strong>{folderName(item.name)}</strong>
-                {item.opening_date && <small>{formatDate(peruDate(item.opening_date))}</small>}
+                <small>
+                  {item.status && (
+                    <span className={`folder-tab-status${item.status === 'CERRADO' ? ' is-closed' : ''}`}>
+                      {item.status === 'CERRADO' ? <Icon name="lock" size={11} /> : <i aria-hidden="true" />}
+                      {statusLabel(item.status)}
+                    </span>
+                  )}
+                  {item.opening_date && <span>{formatDate(peruDate(item.opening_date))}</span>}
+                </small>
               </span>
             </button>
           ))}
@@ -1051,16 +1053,14 @@ export default function CaseDocuments({
           >
             <Icon name="refresh" />
           </button>
-          <LockedTip locked={locked}>
-            <button
-              type="button"
-              className="secondary folder-add"
-              disabled={locked || loading}
-              onClick={() => setAdding(true)}
-            >
-              <Icon name="folderPlus" /> Añadir carpeta
-            </button>
-          </LockedTip>
+          <button
+            type="button"
+            className="secondary folder-add"
+            disabled={loading}
+            onClick={() => setAdding(true)}
+          >
+            <Icon name="folderPlus" /> Añadir carpeta
+          </button>
         </div>
       </div>
       {folder ? (
@@ -1074,8 +1074,8 @@ export default function CaseDocuments({
             key={folder.id}
             expedienteId={expedienteId}
             folder={folder}
-            locked={locked}
             reload={refresh}
+            onFolderUpdated={updated}
           />
         </div>
       ) : (
@@ -1087,11 +1087,9 @@ export default function CaseDocuments({
             </span>
             <h4>Este expediente no tiene carpetas</h4>
             <p>Añade una carpeta para organizar sus secciones y documentos.</p>
-            <LockedTip locked={locked}>
-              <button type="button" className="primary" disabled={locked} onClick={() => setAdding(true)}>
-                <Icon name="plus" /> Añadir carpeta
-              </button>
-            </LockedTip>
+            <button type="button" className="primary" onClick={() => setAdding(true)}>
+              <Icon name="plus" /> Añadir carpeta
+            </button>
           </div>
         )
       )}
@@ -1117,15 +1115,41 @@ export default function CaseDocuments({
 function FolderTree({
   expedienteId,
   folder,
-  locked,
   reload,
+  onFolderUpdated,
 }: {
   expedienteId: number
   folder: ExpedienteFolder
-  locked: boolean
   // Cambia cuando se pulsa "Actualizar" en la barra de carpetas.
   reload: number
+  onFolderUpdated: (folder: ExpedienteFolder) => void
 }) {
+  // Una carpeta cerrada queda en solo lectura (sus secciones y documentos).
+  const locked = folder.status === 'CERRADO'
+  const locations = useLocations()
+  const [savingState, setSavingState] = useState<string | null>(null)
+  const [stateError, setStateError] = useState('')
+  const track =
+    folder.location && !locations.some(option => option.value === folder.location)
+      ? [...locations, { value: folder.location, label: locationLabel(folder.location) }]
+      : locations
+  const currentStep = track.findIndex(option => option.value === folder.location)
+  async function changeState(kind: 'status' | 'location', value: string) {
+    if (savingState || value === folder[kind]) return
+    setSavingState(`${kind}:${value}`)
+    setStateError('')
+    try {
+      const next =
+        kind === 'status'
+          ? await foldersService.updateStatus(expedienteId, folder.id, value)
+          : await foldersService.updateLocation(expedienteId, folder.id, value)
+      onFolderUpdated({ ...folder, ...next, [kind]: next?.[kind] ?? value })
+    } catch (caught) {
+      setStateError(errorMessage(caught))
+    } finally {
+      setSavingState(null)
+    }
+  }
   const [sections, setSections] = useState<ExpedienteSection[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -1140,7 +1164,7 @@ function FolderTree({
   const [notice, setNotice] = useState('')
   const [moving, setMoving] = useState<number | null>(null)
   const firstLoad = useRef(true)
-  // Si el expediente se cierra con un diálogo abierto, se cierra el diálogo.
+  // Si la carpeta se cierra con un diálogo abierto, se cierra el diálogo.
   useEffect(() => {
     if (locked) {
       setSectionDialog(null)
@@ -1698,6 +1722,76 @@ function FolderTree({
           </LockedTip>
         </div>
       </div>
+      <div className={`folder-state${locked ? ' is-locked' : ''}`}>
+        <div className="folder-state-item">
+          <span className="folder-state-label">Estado</span>
+          <div
+            className="state-switch"
+            data-value={folder.status}
+            role="radiogroup"
+            aria-label="Estado de la carpeta"
+          >
+            <span className="state-switch-thumb" aria-hidden="true" />
+            {caseStatuses.map(option => (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={folder.status === option.value}
+                disabled={savingState !== null}
+                onClick={() => void changeState('status', option.value)}
+              >
+                <span className="state-dot" aria-hidden="true" />
+                {savingState === 'status:' + option.value ? 'Guardando…' : option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="folder-state-item is-wide">
+          <span className="folder-state-label">Ubicación</span>
+          <ol
+            className="location-track"
+            aria-label="Ubicación de la carpeta"
+            style={
+              {
+                '--steps': track.length,
+                '--track-progress': currentStep < 0 ? 0 : currentStep / Math.max(1, track.length - 1),
+              } as CSSProperties
+            }
+          >
+            {track.map((option, index) => (
+              <li
+                key={option.value}
+                className={index < currentStep ? 'is-done' : index === currentStep ? 'is-current' : ''}
+              >
+                <button
+                  type="button"
+                  disabled={savingState !== null}
+                  aria-current={index === currentStep ? 'step' : undefined}
+                  title={`Mover la carpeta a ${option.label}`}
+                  onClick={() => void changeState('location', option.value)}
+                >
+                  <span className="track-dot" aria-hidden="true">
+                    {savingState === 'location:' + option.value ? <span className="track-spinner" /> : index + 1}
+                  </span>
+                  <span className="track-label">{option.label}</span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+      {stateError && (
+        <p className="api-error tree-notice" role="alert">
+          {stateError}
+        </p>
+      )}
+      {locked && (
+        <p className="tree-locked-banner" role="note">
+          <Icon name="lock" /> Carpeta cerrada · solo lectura. Reábrela para agregar o modificar secciones y
+          documentos. La ubicación sí se puede cambiar.
+        </p>
+      )}
       {notice && (
         <p className="api-success tree-notice" role="status">
           {notice}

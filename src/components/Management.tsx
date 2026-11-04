@@ -277,14 +277,9 @@ function CaseDetail({
   }, [initialFile.id, participantRefresh])
 
   const [saving, setSaving] = useState<string | null>(null)
-  // Estado y ubicación pasarán a cada carpeta; mientras tanto se respeta el cierre del expediente.
-  const closed = file.status === 'CERRADO'
   const altView = useAltCaseView()
   const [descriptionDraft, setDescriptionDraft] = useState<string | null>(null)
   const [descriptionError, setDescriptionError] = useState('')
-  useEffect(() => {
-    if (closed) setDescriptionDraft(null)
-  }, [closed])
   async function saveDescription() {
     if (descriptionDraft === null || saving) return
     if (descriptionDraft.trim() === (file.description || '').trim()) {
@@ -336,8 +331,7 @@ function CaseDetail({
                       <button
                         type="button"
                         className="row-link"
-                        disabled={closed || saving !== null}
-                        title={closed ? 'Reabre el expediente para editar la descripción.' : undefined}
+                        disabled={saving !== null}
                         onClick={() => {
                           setDescriptionError('')
                           setDescriptionDraft(file.description || '')
@@ -401,7 +395,6 @@ function CaseDetail({
         </section>
         <CaseDocuments
           expedienteId={file.id}
-          locked={closed}
           folderId={folderId}
           onFolderChange={onFolderChange}
         />

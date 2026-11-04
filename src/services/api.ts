@@ -69,6 +69,23 @@ export const defaultLocations: Option[] = Object.entries(locationLabels).map(([v
 export const statusLabel = (value?: string) =>
   caseStatuses.find(option => option.value === value)?.label || value || 'Sin estado'
 export const locationLabel = (value?: string) => (value && locationLabels[value]) || value || 'Sin ubicación'
+// Catálogo del backend (strings u objetos) → opciones; si viene vacío se usan las conocidas.
+function toOptions(rows: unknown[], labels: Record<string, string>, fallback: Option[]): Option[] {
+  const options = rows
+    .map(row => {
+      if (typeof row === 'string') return { value: row, label: labels[row] || row }
+      const item = (row || {}) as Record<string, unknown>
+      const value = String(
+        item.value ?? item.code ?? item.name ?? item.status ?? item.location ?? '',
+      ).trim()
+      return { value, label: labels[value] || String(item.label ?? '').trim() || value }
+    })
+    .filter(option => option.value)
+  return options.length ? options : fallback
+}
+const statusLabels: Record<string, string> = Object.fromEntries(
+  caseStatuses.map(option => [option.value, option.label]),
+)
 // Muestra el CAL con 6 dígitos: 21 → "000021".
 export const formatCal = (value?: number | string | null) =>
   value == null || value === '' ? '' : String(value).padStart(6, '0')
@@ -90,6 +107,9 @@ export interface ExpedienteFolder {
   name: string
   // Siglas heredadas del tipo de carpeta.
   abbreviation?: string
+  // Cada carpeta tiene su propio estado (ABIERTO/CERRADO) y ubicación.
+  status?: string
+  location?: string
   // Instante en UTC (p. ej. 2026-11-04T05:00:00Z = medianoche en Perú).
   opening_date?: string | null
   created_at?: string
@@ -273,23 +293,6 @@ export const expedientesService = {
   async list(limit = 20, offset = 0, filters: CaseFilters = {}) {
     return (await expedientesService.page(limit, offset, filters)).data
   },
-  async locations(): Promise<Option[]> {
-    const rows = list<unknown>(await request('/expediente-locations'), 'locations')
-    const options = rows
-      .map(row => {
-        if (typeof row === 'string') return { value: row, label: locationLabel(row) }
-        const item = (row || {}) as Record<string, unknown>
-        const value = String(item.value ?? item.code ?? item.name ?? item.location ?? '').trim()
-        return { value, label: locationLabels[value] || String(item.label ?? '').trim() || value }
-      })
-      .filter(option => option.value)
-    return options.length ? options : defaultLocations
-  },
-  async updateLocation(id: number, location: string) {
-    const value = location.trim()
-    if (!value) throw new Error('Selecciona una ubicación.')
-    return request<CaseFile>(`/expedientes/${id}/location`, { location: value }, 'PATCH')
-  },
   create(input: {
     opening_date: string
     init_type: InitiationType
@@ -323,7 +326,7 @@ export const expedientesService = {
   async statusOptions() {
     return list<ExpedienteStatus>(await request('/expediente-statuses'), 'statuses')
   },
-  // "" borra la descripción. Si el expediente está cerrado, el backend responde 409.
+  // "" borra la descripción.
   async updateDescription(id: number, description: string) {
     try {
       return await request<CaseFile>(
@@ -332,17 +335,10 @@ export const expedientesService = {
         'PATCH',
       )
     } catch (error) {
-      if (error instanceof ApiError && error.status === 409)
-        throw new ApiError('El expediente está cerrado: reábrelo para editar la descripción.', 409)
       if (error instanceof ApiError && error.status === 404)
         throw new ApiError('No existe este expediente.', 404)
       throw error
     }
-  },
-  updateStatus(id: number, status: string) {
-    const value = status.trim()
-    if (!value || value.length > 30) throw new Error('El estado es obligatorio y admite hasta 30 caracteres.')
-    return request<CaseFile>(`/expedientes/${id}/status`, { status: value }, 'PATCH')
   },
   // Los participantes solo se asignan al crear el expediente; no hay endpoints para modificarlos después.
   async participants(id: number, role: Role) {
@@ -576,6 +572,35 @@ export const foldersService = {
         throw new ApiError('Ya existe un tipo de carpeta con ese nombre o esas siglas.', 409)
       throw error
     }
+  },
+  async statuses() {
+    return toOptions(list<unknown>(await request('/folder-statuses'), 'statuses'), statusLabels, caseStatuses)
+  },
+  async locations() {
+    return toOptions(
+      list<unknown>(await request('/folder-locations'), 'locations'),
+      locationLabels,
+      defaultLocations,
+    )
+  },
+  // Si la carpeta está cerrada no se pueden modificar sus secciones ni documentos.
+  updateStatus(expedienteId: number, folderId: number, status: string) {
+    const value = status.trim()
+    if (!value || value.length > 30) throw new Error('El estado es obligatorio y admite hasta 30 caracteres.')
+    return request<ExpedienteFolder>(
+      `/expedientes/${positiveId(expedienteId, 'El expediente')}/folders/${positiveId(folderId, 'La carpeta')}/status`,
+      { status: value },
+      'PATCH',
+    )
+  },
+  updateLocation(expedienteId: number, folderId: number, location: string) {
+    const value = location.trim()
+    if (!value) throw new Error('Selecciona una ubicación.')
+    return request<ExpedienteFolder>(
+      `/expedientes/${positiveId(expedienteId, 'El expediente')}/folders/${positiveId(folderId, 'La carpeta')}/location`,
+      { location: value },
+      'PATCH',
+    )
   },
   async list(expedienteId: number) {
     return list<ExpedienteFolder>(

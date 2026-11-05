@@ -123,10 +123,13 @@
 .folders-denomination {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
   white-space: nowrap;
 }
+.folders-denomination > .folders-abbr {
+  margin-right: 10px;
+}
 .folders-abbr {
+  flex: 0 0 auto;
   display: inline-grid;
   place-items: center;
   min-width: 30px;

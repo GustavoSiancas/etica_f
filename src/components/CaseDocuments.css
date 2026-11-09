@@ -1404,3 +1404,18 @@
     padding: 16px 18px 20px;
   }
 }
+
+/* Diálogos de confirmación: contenido centrado */
+.tree-dialog-sm .person-dialog-heading > div {
+  flex: 1;
+  min-width: 0;
+  padding-left: 34px; /* compensa el botón de cerrar para que el título quede al centro */
+  text-align: center;
+}
+.tree-dialog-sm .tree-confirm-text {
+  text-align: center;
+  text-wrap: balance;
+}
+.tree-dialog-sm .case-create-actions {
+  justify-content: center;
+}

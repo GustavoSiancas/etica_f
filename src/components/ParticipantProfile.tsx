@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { expedientesService, formatCal, formatCaseNumber, initiationTypes } from '../services/api'
+import { expedientesService, formatCal, formatCaseNumber, formatPeruDay, initiationTypes, statusLabel } from '../services/api'
 import type { CaseFile, CaseFilters, InitiationType, Person, Role } from '../services/api'
 import CaseRow from './CaseRow'
 
@@ -11,11 +11,7 @@ function initials(name: string) {
   const parts = name.trim().split(/\s+/)
   return ((parts[0]?.[0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase() || '?'
 }
-function formatDate(value?: string | null) {
-  if (!value) return 'Sin fecha'
-  const date = new Date(value + 'T00:00:00')
-  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium' }).format(date)
-}
+const formatDate = (value?: string | null) => formatPeruDay(value) || 'Sin fecha'
 
 export default function ParticipantProfile({ role, person, onBack, onOpenCase }: { role: Role; person: Person; onBack: () => void; onOpenCase: (file: CaseFile) => void }) {
   const singular = role === 'denunciantes' ? 'Denunciante' : 'Denunciado'
@@ -83,11 +79,12 @@ export default function ParticipantProfile({ role, person, onBack, onOpenCase }:
       {error && <p className="api-error profile-error" role="alert">{error} <button type="button" className="row-link" onClick={() => setRefresh(n => n + 1)}>Reintentar</button></p>}
       {loading && !page ? <div className="empty-state" role="status">Cargando expedientes…</div>
         : page && page.data.length ? <div className={`table-scroll${loading ? ' is-refreshing' : ''}`}><table>
-          <thead><tr><th>Expediente</th><th>Fecha de apertura</th><th>Tipo de inicio</th><th aria-label="Abrir"/></tr></thead>
+          <thead><tr><th>Expediente</th><th>Fecha de apertura</th><th>Tipo de inicio</th><th>Estado</th><th aria-label="Abrir"/></tr></thead>
           <tbody>{page.data.map(file => <CaseRow key={file.id} file={file} onOpen={onOpenCase}>
             <td><strong>{formatCaseNumber(file.number)}</strong>{file.description && <small className="profile-case-desc">{file.description}</small>}</td>
             <td>{formatDate(file.opening_date)}</td>
             <td>{file.init_type ? initiationTypes[file.init_type as InitiationType] || file.init_type : 'Sin tipo'}</td>
+            <td><span className="status" data-status={file.status}>{statusLabel(file.status)}</span></td>
             <td className="profile-open">Ver →</td>
           </CaseRow>)}</tbody>
         </table></div>

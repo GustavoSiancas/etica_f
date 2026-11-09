@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  caseStatuses,
   expedientesService,
   formatCal,
   formatCaseNumber,
+  formatPeruDay,
   initiationTypes,
-  peruDate,
   personasService,
+  statusLabel,
 } from '../services/api'
 import { navigate, paths, readRouteState, updateRouteState } from '../router'
 import type { CaseRef, Route } from '../router'
@@ -14,8 +16,10 @@ import PeopleRegistry from './PeopleRegistry'
 import ParticipantProfile from './ParticipantProfile'
 import CaseRow from './CaseRow'
 import { useAltCaseView } from '../caseView'
-import type { ActiveParticipant, CaseFile, Person, Role, InitiationType } from '../services/api'
+import type { ActiveParticipant, CaseFile, CaseStatus, Person, Role, InitiationType } from '../services/api'
 import CaseDocuments from './CaseDocuments'
+import HistoryDialog from './HistoryDialog'
+import Modal from './Modal'
 
 const pageSize = 20
 const errorMessage = (error: unknown) =>
@@ -295,13 +299,45 @@ function CaseDetail({
       setSaving(null)
     }
   }
-  // La fecha de apertura puede llegar como YYYY-MM-DD o como instante UTC: se muestra el día en Perú.
-  const openingDay = peruDate(file.opening_date)
-  const formattedDate = openingDay
-    ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'long', timeZone: 'UTC' }).format(
-        new Date(openingDay + 'T00:00:00Z'),
-      )
-    : 'No disponible'
+  // Fechas calendario: se muestran tal cual, sin convertirlas como instantes UTC.
+  const formattedDate = formatPeruDay(file.opening_date, 'long') || 'No disponible'
+  const closed = file.status === 'CERRADO'
+
+  // Tras cambiar el expediente se vuelven a leer sus carpetas (cerrarlo cierra las abiertas).
+  const [foldersReload, setFoldersReload] = useState(0)
+  const [history, setHistory] = useState(false)
+  const [statusConfirm, setStatusConfirm] = useState(false)
+  const [statusError, setStatusError] = useState('')
+  // Las respuestas traen el expediente completo.
+  function apply(next: CaseFile) {
+    const merged = { ...file, ...next }
+    setFile(merged)
+    onChanged(merged)
+  }
+  async function changeStatus(next: CaseStatus) {
+    if (saving || next === file.status) return
+    setSaving('status')
+    setStatusError('')
+    try {
+      apply(await expedientesService.updateStatus(file.id, next))
+      setStatusConfirm(false)
+      // Cerrar devuelve solo el expediente: hay que refrescar sus carpetas. Reabrir no las cambia.
+      if (next === 'CERRADO') setFoldersReload(value => value + 1)
+    } catch (caught) {
+      setStatusError(errorMessage(caught))
+    } finally {
+      setSaving(null)
+    }
+  }
+  // Cerrar o reabrir una carpeta puede cerrar o reabrir el expediente: se vuelve a consultar.
+  function refreshCase() {
+    expedientesService
+      .findById(initialFile.id)
+      .then(apply)
+      .catch(() => {
+        /* Se conserva lo mostrado: es solo una actualización de fondo. */
+      })
+  }
   return (
     <>
       {/* Mismos bloques en ambas vistas; solo cambia su ubicación (CSS), así no se pierde lo abierto. */}
@@ -386,13 +422,65 @@ function CaseDetail({
                 <dt>Fecha de apertura</dt>
                 <dd>{formattedDate}</dd>
               </div>
+              {closed && (
+                <div>
+                  <dt>Fecha de cierre</dt>
+                  <dd>{formatPeruDay(file.closing_date, 'long') || 'No disponible'}</dd>
+                </div>
+              )}
             </dl>
+          </div>
+          <div className="case-controls case-status-controls">
+            <div className="control-card">
+              <span className="control-label">Estado del expediente</span>
+              <div
+                className="state-switch"
+                data-value={file.status}
+                role="radiogroup"
+                aria-label="Estado del expediente"
+              >
+                <span className="state-switch-thumb" aria-hidden="true" />
+                {caseStatuses.map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={file.status === option.value}
+                    disabled={saving !== null}
+                    onClick={() => {
+                      if (option.value === file.status) return
+                      setStatusError('')
+                      if (option.value === 'CERRADO') setStatusConfirm(true)
+                      else void changeStatus('ABIERTO')
+                    }}
+                  >
+                    <span className="state-dot" aria-hidden="true" />
+                    {saving === 'status' && option.value === 'ABIERTO' ? 'Guardando…' : option.label}
+                  </button>
+                ))}
+              </div>
+              <p className="control-hint">
+                {closed
+                  ? 'Reabrirlo no reabre sus carpetas.'
+                  : 'Cerrarlo cierra todas sus carpetas abiertas.'}
+              </p>
+              <button type="button" className="secondary" onClick={() => setHistory(true)}>
+                Ver historial
+              </button>
+            </div>
+            {statusError && !statusConfirm && (
+              <p className="api-error case-controls-feedback" role="alert">
+                {statusError}
+              </p>
+            )}
           </div>
         </section>
         <CaseDocuments
           expedienteId={file.id}
           folderId={folderId}
           onFolderChange={onFolderChange}
+          reload={foldersReload}
+          onCaseChanged={refreshCase}
         />
         <aside className="case-participants">
           <PeoplePanel
@@ -403,6 +491,45 @@ function CaseDetail({
           <PeoplePanel role="denunciados" state={participantState.denunciados} onRetry={retryParticipants} />
         </aside>
       </div>
+      {history && <HistoryDialog expedienteId={file.id} onClose={() => setHistory(false)} />}
+      {statusConfirm && (
+        <Modal
+          title="Cerrar expediente"
+          size="sm"
+          busy={saving === 'status'}
+          onClose={() => setStatusConfirm(false)}
+        >
+          <div className="case-create-form tree-form">
+            <p className="tree-confirm-text">
+              Se cerrará el expediente <strong>{formatCaseNumber(file.number)}</strong> y todas sus carpetas
+              abiertas. Las carpetas ya cerradas conservan su fecha de cierre.
+            </p>
+            {statusError && (
+              <p className="api-error" role="alert">
+                {statusError}
+              </p>
+            )}
+            <div className="case-create-actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={saving === 'status'}
+                onClick={() => setStatusConfirm(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="primary tree-danger"
+                disabled={saving === 'status'}
+                onClick={() => void changeStatus('CERRADO')}
+              >
+                {saving === 'status' ? 'Cerrando…' : 'Cerrar expediente'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   )
 }
@@ -566,7 +693,9 @@ export default function Management({ route }: { route: ManagementRoute }) {
                 <tr>
                   <th>Expediente</th>
                   <th>Fecha de apertura</th>
+                  <th>Fecha de cierre</th>
                   <th>Tipo de inicio</th>
+                  <th>Estado</th>
                 </tr>
               </thead>
               <tbody>
@@ -575,8 +704,14 @@ export default function Management({ route }: { route: ManagementRoute }) {
                     <td>
                       <strong>{formatCaseNumber(file.number)}</strong>
                     </td>
-                    <td>{peruDate(file.opening_date) || 'Sin fecha'}</td>
+                    <td>{formatPeruDay(file.opening_date) || 'Sin fecha'}</td>
+                    <td>{formatPeruDay(file.closing_date) || '—'}</td>
                     <td>{initiationTypes[file.init_type as InitiationType] || file.init_type}</td>
+                    <td>
+                      <span className="status" data-status={file.status}>
+                        {statusLabel(file.status)}
+                      </span>
+                    </td>
                   </CaseRow>
                 ))}
               </tbody>

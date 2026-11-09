@@ -9,6 +9,8 @@ import {
   documentsService,
   foldersService,
   folderName,
+  formatPeruDateTime,
+  formatPeruDay,
   maxUploadBytes,
   peruDate,
   sectionsService,
@@ -16,7 +18,10 @@ import {
 } from '../services/api'
 import { navigate, paths } from '../router'
 import useLocations from './useLocations'
+import Modal from './Modal'
+import HistoryDialog from './HistoryDialog'
 import type {
+  CaseStatus,
   DocumentRecord,
   ExpedienteFolder,
   ExpedienteSection,
@@ -212,65 +217,6 @@ function fileKind(url?: string | null) {
   if (extension === 'doc' || extension === 'docx') return 'doc'
   if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension)) return 'img'
   return 'other'
-}
-
-function Modal({
-  eyebrow,
-  title,
-  description,
-  busy,
-  onClose,
-  children,
-  size = 'md',
-}: {
-  eyebrow?: string
-  title: string
-  description?: string
-  busy?: boolean
-  onClose: () => void
-  children: ReactNode
-  size?: 'sm' | 'md'
-}) {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [busy, onClose])
-  return (
-    <div
-      className="person-dialog-backdrop"
-      onMouseDown={event => {
-        if (event.target === event.currentTarget && !busy) onClose()
-      }}
-    >
-      <section
-        className={`person-dialog tree-dialog tree-dialog-${size}`}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="tree-dialog-title"
-      >
-        <div className="person-dialog-heading">
-          <div>
-            {eyebrow && <p className="eyebrow">{eyebrow}</p>}
-            <h2 id="tree-dialog-title">{title}</h2>
-            {description && <p>{description}</p>}
-          </div>
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy}
-            onClick={onClose}
-            aria-label="Cerrar diálogo"
-          >
-            ×
-          </button>
-        </div>
-        {children}
-      </section>
-    </div>
-  )
 }
 
 function SectionForm({
@@ -951,11 +897,17 @@ export default function CaseDocuments({
   expedienteId,
   folderId = null,
   onFolderChange,
+  reload = 0,
+  onCaseChanged,
 }: {
   expedienteId: number
   // Carpeta indicada en la URL; si no existe se muestra la primera.
   folderId?: number | null
   onFolderChange?: (folderId: number) => void
+  // Cambia cuando el expediente se cierra: hay que volver a leer las carpetas.
+  reload?: number
+  // Abrir, cerrar o crear una carpeta puede cambiar el estado del expediente.
+  onCaseChanged?: () => void
 }) {
   const [folders, setFolders] = useState<ExpedienteFolder[]>([])
   const [localFolder, setLocalFolder] = useState<number | null>(null)
@@ -982,7 +934,7 @@ export default function CaseDocuments({
     return () => {
       current = false
     }
-  }, [expedienteId, refresh])
+  }, [expedienteId, refresh, reload])
   const wanted = folderId ?? localFolder
   const folder = folders.find(item => item.id === wanted) || folders[0] || null
   const selected = folder?.id ?? null
@@ -994,6 +946,8 @@ export default function CaseDocuments({
     setFolders(state => (state.some(item => item.id === next.id) ? state : [...state, next]))
     select(next.id)
     setAdding(false)
+    // Una carpeta abierta nueva reabre el expediente si estaba cerrado.
+    onCaseChanged?.()
   }
   const updated = (next: ExpedienteFolder) =>
     setFolders(state => state.map(item => (item.id === next.id ? { ...item, ...next } : item)))
@@ -1084,8 +1038,9 @@ export default function CaseDocuments({
             key={folder.id}
             expedienteId={expedienteId}
             folder={folder}
-            reload={refresh}
+            reload={refresh + reload}
             onFolderUpdated={updated}
+            onStatusChanged={onCaseChanged}
           />
         </div>
       ) : (
@@ -1127,33 +1082,59 @@ function FolderTree({
   folder,
   reload,
   onFolderUpdated,
+  onStatusChanged,
 }: {
   expedienteId: number
   folder: ExpedienteFolder
   // Cambia cuando se pulsa "Actualizar" en la barra de carpetas.
   reload: number
   onFolderUpdated: (folder: ExpedienteFolder) => void
+  onStatusChanged?: () => void
 }) {
   // Una carpeta cerrada queda en solo lectura (sus secciones y documentos).
   const locked = folder.status === 'CERRADO'
   const locations = useLocations()
   const [savingState, setSavingState] = useState<string | null>(null)
   const [stateError, setStateError] = useState('')
+  const [history, setHistory] = useState(false)
   const track =
     folder.location && !locations.some(option => option.value === folder.location)
       ? [...locations, { value: folder.location, label: locationLabel(folder.location) }]
       : locations
   const currentStep = track.findIndex(option => option.value === folder.location)
+  // Envía el cambio; solo actualiza la pantalla si el backend lo aceptó.
+  async function applyState(kind: 'status' | 'location', value: string) {
+    const next =
+      kind === 'status'
+        ? await foldersService.updateStatus(expedienteId, folder.id, value as CaseStatus)
+        : await foldersService.updateLocation(expedienteId, folder.id, value)
+    onFolderUpdated({ ...folder, ...next, [kind]: next?.[kind] ?? value })
+    if (kind === 'status') onStatusChanged?.()
+  }
   async function changeState(kind: 'status' | 'location', value: string) {
     if (savingState || value === folder[kind]) return
     setSavingState(`${kind}:${value}`)
     setStateError('')
     try {
-      const next =
-        kind === 'status'
-          ? await foldersService.updateStatus(expedienteId, folder.id, value)
-          : await foldersService.updateLocation(expedienteId, folder.id, value)
-      onFolderUpdated({ ...folder, ...next, [kind]: next?.[kind] ?? value })
+      if (kind === 'status' && value === 'CERRADO') {
+        // Se consulta al pulsar: si es la última abierta, se avisa que también se cerrará el expediente.
+        const preview = await foldersService.closePreview(expedienteId, folder.id)
+        if (preview.will_close_expediente) {
+          setConfirmError('')
+          setConfirm({
+            title: 'Cerrar la última carpeta abierta',
+            confirmLabel: 'Cerrar carpeta y expediente',
+            message: (
+              <>
+                Esta es la última carpeta abierta. Al cerrarla también se cerrará el expediente.
+              </>
+            ),
+            action: () => applyState('status', 'CERRADO'),
+          })
+          return
+        }
+      }
+      await applyState(kind, value)
     } catch (caught) {
       setStateError(errorMessage(caught))
     } finally {
@@ -1725,6 +1706,10 @@ function FolderTree({
       <div className="folder-head">
         <p className="folder-head-meta">
           {!loading && `${sections.length} ${sections.length === 1 ? 'sección' : 'secciones'}`}
+          {folder.opening_date && <span>Abierta el {formatPeruDay(folder.opening_date)}</span>}
+          {folder.status === 'CERRADO' && folder.closing_date && (
+            <span>Cerrada el {formatPeruDateTime(folder.closing_date)}</span>
+          )}
         </p>
         <div className={`folder-state${locked ? ' is-locked' : ''}`}>
           <div className="folder-state-item">
@@ -1784,6 +1769,9 @@ function FolderTree({
           </div>
         </div>
         <div className="documents-actions">
+          <button type="button" className="secondary" onClick={() => setHistory(true)}>
+            Historial
+          </button>
           {sections.length > 0 && (
             <button
               type="button"
@@ -1919,6 +1907,9 @@ function FolderTree({
             }
           />
         </Modal>
+      )}
+      {history && (
+        <HistoryDialog expedienteId={expedienteId} folder={folder} onClose={() => setHistory(false)} />
       )}
       {confirm && (
         <Modal title={confirm.title} busy={confirmBusy} size="sm" onClose={() => setConfirm(null)}>

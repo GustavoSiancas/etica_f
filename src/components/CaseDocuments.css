@@ -1169,3 +1169,129 @@
     transition: none;
   }
 }
+
+/* Fechas de la carpeta junto al número de secciones */
+.folder-head-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.folder-head-meta span {
+  font-weight: 400;
+  color: var(--text-subtle);
+}
+
+/* Estado del expediente en la cabecera (una sola tarjeta) */
+.case-hero .case-status-controls {
+  grid-template-columns: 1fr;
+  flex: 0 1 300px;
+}
+.case-hero .case-status-controls .control-card {
+  min-height: 0;
+}
+
+/* Historial */
+.history-body {
+  display: grid;
+  gap: 14px;
+}
+.history-body > .api-error,
+.history-body > .detail-empty {
+  margin: 0;
+  padding-inline: 0;
+}
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: min(60vh, 560px);
+  overflow-y: auto;
+  transition: opacity 0.15s;
+}
+.history-list.is-refreshing {
+  opacity: 0.55;
+}
+.history-item {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  padding: 12px 4px 14px 0;
+}
+.history-item:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 26px;
+  bottom: -12px;
+  width: 2px;
+  background: var(--border);
+}
+.history-marker {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--border-strong);
+}
+.history-marker[data-status='ABIERTO'] {
+  border-color: var(--success-border);
+  background: var(--success-soft);
+}
+.history-main {
+  flex: 1;
+  min-width: 0;
+}
+.history-title {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 14px;
+}
+.history-title strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.history-title time {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.history-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 8px 0 0;
+  font-size: 12.5px;
+}
+.history-facts div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.history-facts dt {
+  color: var(--text-subtle);
+}
+.history-facts dd {
+  margin: 0;
+  color: var(--text);
+}
+.history-facts dd.is-empty {
+  color: var(--text-subtle);
+  font-style: italic;
+}
+.history-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.history-footer > div {
+  display: flex;
+  gap: 8px;
+}

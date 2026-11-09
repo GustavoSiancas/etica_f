@@ -4,8 +4,9 @@ import {
   folderName,
   foldersService,
   formatCaseNumber,
+  formatPeruDateTime,
+  formatPeruDay,
   locationLabel,
-  peruDate,
   statusLabel,
 } from '../services/api'
 import type { FolderFilters, FolderType, GlobalFolder } from '../services/api'
@@ -20,13 +21,7 @@ type Filters = typeof emptyFilters
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : 'Ocurrió un error inesperado.'
 
-function formatDay(value?: string | null) {
-  const day = peruDate(value)
-  if (!day) return 'Sin fecha'
-  return new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium', timeZone: 'UTC' }).format(
-    new Date(day + 'T00:00:00Z'),
-  )
-}
+const formatDay = (value?: string | null) => formatPeruDay(value) || 'Sin fecha'
 
 // Menú "Carpetas": todas las carpetas de todos los expedientes (GET /folders).
 export default function FoldersList() {
@@ -256,6 +251,7 @@ export default function FoldersList() {
                   <th>Carpeta</th>
                   <th>Expediente</th>
                   <th>Apertura</th>
+                  <th>Cierre</th>
                   <th>Ubicación</th>
                   <th>Estado</th>
                 </tr>
@@ -291,6 +287,7 @@ export default function FoldersList() {
                         : `#${folder.expediente_id}`}
                     </td>
                     <td>{formatDay(folder.opening_date)}</td>
+                    <td>{formatPeruDateTime(folder.closing_date) || '—'}</td>
                     <td>{locationLabel(folder.location)}</td>
                     <td>
                       <span className="status" data-status={folder.status}>

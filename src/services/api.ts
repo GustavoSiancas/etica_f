@@ -29,12 +29,15 @@ export interface PeopleFilters {
 export interface CaseFile {
   id: number
   number: string
-  status?: string
-  location?: string
+  // Estado propio del expediente. La ubicación es solo de cada carpeta.
+  status?: CaseStatus
   init_type: string
   description?: string
+  // Fechas calendario (YYYY-MM-DD). El backend asigna la de cierre.
+  opening_date?: string | null
+  closing_date?: string | null
   created_at?: string
-  opening_date?: string
+  updated_at?: string
 }
 export interface CaseFilesPage {
   data: CaseFile[]
@@ -112,8 +115,46 @@ export interface ExpedienteFolder {
   location?: string
   // Instante en UTC (p. ej. 2026-11-04T05:00:00Z = medianoche en Perú).
   opening_date?: string | null
+  // El backend asigna el cierre.
+  closing_date?: string | null
   created_at?: string
   updated_at?: string
+}
+// Previsión de GET .../status/closed: si cerrar esta carpeta cerraría también el expediente.
+export interface FolderClosePreview {
+  expediente_id: number
+  folder_id: number
+  folder_status: CaseStatus
+  expediente_status: CaseStatus
+  will_close_expediente: boolean
+}
+export const historyEventLabels: Record<string, string> = {
+  EXPEDIENTE_ABIERTO: 'Expediente abierto/reabierto',
+  EXPEDIENTE_CERRADO: 'Expediente cerrado',
+  EXPEDIENTE_DESCRIPCION_ACTUALIZADA: 'Descripción actualizada',
+  CARPETA_ABIERTA: 'Carpeta abierta/reabierta',
+  CARPETA_CERRADA: 'Carpeta cerrada',
+  CARPETA_UBICACION_ACTUALIZADA: 'Ubicación actualizada',
+}
+// Evento del historial. En eventos del expediente folder_id, folder_name y location son null.
+export interface HistoryEvent {
+  id: number
+  expediente_id: number
+  folder_id: number | null
+  folder_name: string | null
+  event: string
+  status: string
+  location: string | null
+  opening_date: string | null
+  closing_date: string | null
+  // Cuándo ocurrió el evento (UTC).
+  changed_at: string
+}
+export interface HistoryPage {
+  data: HistoryEvent[]
+  total: number
+  limit: number
+  offset: number
 }
 // Carpeta en el listado global (GET /folders): incluye el número del expediente
 // y su denominación ("00004-2026 EP").
@@ -174,10 +215,6 @@ export interface DocumentsPage {
   total: number
   limit: number
   offset: number
-}
-export interface ExpedienteStatus {
-  value: string
-  label: string
 }
 export interface Association {
   id: number
@@ -254,6 +291,12 @@ function pagination(limit: number, offset: number) {
   if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isInteger(offset) || offset < 0)
     throw new Error('Paginación inválida.')
   return `limit=${limit}&offset=${offset}`
+}
+async function historyPage(path: string, limit: number, offset: number): Promise<HistoryPage> {
+  const result = await request<Partial<HistoryPage>>(`${path}?${pagination(limit, offset)}`)
+  if (!result || !Array.isArray(result.data) || typeof result.total !== 'number')
+    throw new Error('El formato del historial no es válido.')
+  return { data: result.data, total: result.total, limit: result.limit ?? limit, offset: result.offset ?? offset }
 }
 // Consulta paginada de expedientes con filtros de estado, ubicación y rango de apertura.
 async function casesPage(
@@ -345,8 +388,19 @@ export const expedientesService = {
       ...(input.description?.trim() ? { description: input.description.trim() } : {}),
     })
   },
-  async statusOptions() {
-    return list<ExpedienteStatus>(await request('/expediente-statuses'), 'statuses')
+  // Cerrar cierra sus carpetas abiertas; reabrir no reabre carpetas. Devuelve solo el expediente.
+  async updateStatus(id: number, status: CaseStatus) {
+    if (status !== 'ABIERTO' && status !== 'CERRADO') throw new Error('Estado no permitido.')
+    try {
+      return await request<CaseFile>(`/expedientes/${positiveId(id, 'El expediente')}/status`, { status }, 'PATCH')
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) throw new ApiError('No existe este expediente.', 404)
+      throw error
+    }
+  },
+  // Eventos del expediente y de todas sus carpetas, más recientes primero.
+  history(id: number, limit = 20, offset = 0) {
+    return historyPage(`/expedientes/${positiveId(id, 'El expediente')}/history`, limit, offset)
   },
   // "" borra la descripción.
   async updateDescription(id: number, description: string) {
@@ -519,6 +573,26 @@ export function peruDate(value?: string | null) {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? '' : peruDay.format(date)
 }
+// Día en Perú, legible. Una fecha YYYY-MM-DD se muestra tal cual, sin tratarla como instante UTC.
+export function formatPeruDay(value?: string | null, style: 'medium' | 'long' = 'medium') {
+  const day = peruDate(value)
+  if (!day) return ''
+  return new Intl.DateTimeFormat('es-PE', { dateStyle: style, timeZone: 'UTC' }).format(
+    new Date(day + 'T00:00:00Z'),
+  )
+}
+const peruDateTime = new Intl.DateTimeFormat('es-PE', {
+  timeZone: 'America/Lima',
+  dateStyle: 'medium',
+  timeStyle: 'short',
+})
+// Fecha y hora de Perú para un instante UTC.
+export function formatPeruDateTime(value?: string | null) {
+  if (!value) return ''
+  if (isoDate.test(value)) return formatPeruDay(value)
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '' : peruDateTime.format(date)
+}
 function cleanDocument(input: DocumentInput, creating: boolean) {
   const body: DocumentInput = {}
   if (input.name !== undefined || creating) {
@@ -630,13 +704,27 @@ export const foldersService = {
     )
   },
   // Si la carpeta está cerrada no se pueden modificar sus secciones ni documentos.
-  updateStatus(expedienteId: number, folderId: number, status: string) {
-    const value = status.trim()
-    if (!value || value.length > 30) throw new Error('El estado es obligatorio y admite hasta 30 caracteres.')
+  // Cerrar la última carpeta abierta cierra el expediente; reabrir una carpeta lo reabre.
+  updateStatus(expedienteId: number, folderId: number, status: CaseStatus) {
+    if (status !== 'ABIERTO' && status !== 'CERRADO') throw new Error('Estado no permitido.')
     return request<ExpedienteFolder>(
       `/expedientes/${positiveId(expedienteId, 'El expediente')}/folders/${positiveId(folderId, 'La carpeta')}/status`,
-      { status: value },
+      { status },
       'PATCH',
+    )
+  },
+  // Solo lectura: prevé si cerrar la carpeta cerraría el expediente. Orientativo, no una garantía.
+  closePreview(expedienteId: number, folderId: number) {
+    return request<FolderClosePreview>(
+      `/expedientes/${positiveId(expedienteId, 'El expediente')}/folders/${positiveId(folderId, 'La carpeta')}/status/closed`,
+    )
+  },
+  // Eventos de una sola carpeta, más recientes primero.
+  history(expedienteId: number, folderId: number, limit = 20, offset = 0) {
+    return historyPage(
+      `/expedientes/${positiveId(expedienteId, 'El expediente')}/folders/${positiveId(folderId, 'La carpeta')}/history`,
+      limit,
+      offset,
     )
   },
   updateLocation(expedienteId: number, folderId: number, location: string) {
@@ -674,6 +762,17 @@ export const foldersService = {
   },
 }
 
+// 409 al modificar contenido: la carpeta está cerrada (quizá la cerró otra persona).
+async function closedFolderGuard<T>(promise: Promise<T>): Promise<T> {
+  try {
+    return await promise
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409)
+      throw new ApiError('La carpeta está cerrada: reábrela para agregar o modificar su contenido.', 409)
+    throw error
+  }
+}
+
 export interface SectionNode extends ExpedienteSection {
   children: SectionNode[]
 }
@@ -709,12 +808,16 @@ export const sectionsService = {
     return request<ExpedienteSection>(`/expedientes/${expedienteId}/sections/${sectionId}`)
   },
   create(expedienteId: number, input: SectionInput) {
-    return request<ExpedienteSection>(`/expedientes/${expedienteId}/sections`, cleanSection(input, true))
+    return closedFolderGuard(
+      request<ExpedienteSection>(`/expedientes/${expedienteId}/sections`, cleanSection(input, true)),
+    )
   },
   update(expedienteId: number, sectionId: number, input: SectionInput) {
     const body = cleanSection(input, false)
     if (!Object.keys(body).length) throw new Error('No hay cambios para guardar.')
-    return request<ExpedienteSection>(`/expedientes/${expedienteId}/sections/${sectionId}`, body, 'PATCH')
+    return closedFolderGuard(
+      request<ExpedienteSection>(`/expedientes/${expedienteId}/sections/${sectionId}`, body, 'PATCH'),
+    )
   },
   async remove(expedienteId: number, sectionId: number) {
     try {
@@ -732,23 +835,29 @@ export const sectionsService = {
     )
   },
   createDocument(expedienteId: number, sectionId: number, input: DocumentInput & { name: string }) {
-    return request<DocumentRecord>(
-      `/expedientes/${expedienteId}/sections/${sectionId}/documents`,
-      cleanDocument(input, true),
+    return closedFolderGuard(
+      request<DocumentRecord>(
+        `/expedientes/${expedienteId}/sections/${sectionId}/documents`,
+        cleanDocument(input, true),
+      ),
     )
   },
   link(expedienteId: number, sectionId: number, documentId: number) {
-    return request<void>(
-      `/expedientes/${expedienteId}/sections/${sectionId}/documents/${positiveId(documentId, 'El documento')}`,
-      undefined,
-      'POST',
+    return closedFolderGuard(
+      request<void>(
+        `/expedientes/${expedienteId}/sections/${sectionId}/documents/${positiveId(documentId, 'El documento')}`,
+        undefined,
+        'POST',
+      ),
     )
   },
   unlink(expedienteId: number, sectionId: number, documentId: number) {
-    return request<void>(
-      `/expedientes/${expedienteId}/sections/${sectionId}/documents/${documentId}`,
-      undefined,
-      'DELETE',
+    return closedFolderGuard(
+      request<void>(
+        `/expedientes/${expedienteId}/sections/${sectionId}/documents/${documentId}`,
+        undefined,
+        'DELETE',
+      ),
     )
   },
 }

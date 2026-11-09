@@ -131,6 +131,12 @@ const icons: Record<string, ReactNode> = {
       <path d="m20 20-4-4" />
     </>
   ),
+  history: (
+    <>
+      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+      <path d="M3 3v5h5M12 7v5l3 2" />
+    </>
+  ),
   lock: (
     <>
       <rect x="5" y="11" width="14" height="10" rx="2" />
@@ -1769,9 +1775,7 @@ function FolderTree({
           </div>
         </div>
         <div className="documents-actions">
-          <button type="button" className="secondary" onClick={() => setHistory(true)}>
-            Historial
-          </button>
+          <IconButton icon="history" label="Historial de la carpeta" onClick={() => setHistory(true)} />
           {sections.length > 0 && (
             <button
               type="button"

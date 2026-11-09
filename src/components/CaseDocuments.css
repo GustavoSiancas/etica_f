@@ -1295,3 +1295,9 @@
   display: flex;
   gap: 8px;
 }
+.case-hero .case-status-controls .control-label {
+  justify-content: space-between;
+}
+.case-hero .case-status-controls .control-label .tree-icon-button {
+  text-transform: none;
+}
